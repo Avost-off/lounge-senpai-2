@@ -1,30 +1,37 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Bot Panel</title>
+    <title>Dashboard</title>
 </head>
 <body>
     <h1>Dashboard</h1>
 
-    <table border="1">
-        <tr>
-            <th>Guild</th>
-            <th>User</th>
-            <th>XP</th>
-            <th>Level</th>
-            <th>Balance</th>
-        </tr>
+    <h2>Membres</h2>
+    <ul>
+        <li><a href="/members/search/">Recherche</a></li>
+        <li><a href="/members/levels/">Niveaux</a></li>
+        <li><a href="/members/economy/">Économie</a></li>
+    </ul>
 
-        {% for user in users %}
-        <tr>
-            <td>{{ user.guild_id }}</td>
-            <td>{{ user.user_id }}</td>
-            <td>{{ user.xp }}</td>
-            <td>{{ user.level }}</td>
-            <td>{{ user.balance }}</td>
-        </tr>
-        {% endfor %}
-    </table>
+    <h2>Modération</h2>
+    <ul>
+        <li><a href="/moderation/prison/">Prison</a></li>
+        <li><a href="/moderation/warn/">Warn</a></li>
+        <li><a href="/moderation/logs/">Logs</a></li>
+        <li><a href="/moderation/roles/">Rôles</a></li>
+    </ul>
 
-<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'9d048d07ac0ad11d',t:'MTc3MTQ5MTM4NQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+    <h2>Configuration</h2>
+    <ul>
+        <li><a href="/configuration/commands/">Commandes</a></li>
+        <li><a href="/configuration/permissions/">Permissions</a></li>
+        <li><a href="/configuration/security/">Sécurité</a></li>
+    </ul>
+
+    <h2>Statistiques</h2>
+    <ul>
+        <li><a href="/statistics/">Voir</a></li>
+    </ul>
+
+</body>
 </html>

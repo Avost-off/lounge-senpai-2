@@ -7,10 +7,11 @@ from flask import Flask, render_template, redirect, request, session, flash, url
 # ==============================
 # APP FLASK
 # ==============================
-app = Flask(__name__)
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+app = Flask(__name__, template_folder=os.path.join(BASE_DIR, "templates"))
 app.secret_key = os.environ.get("SESSION_SECRET", "CHANGE_THIS_SECRET_KEY")
 
-DATABASE = "main_database.db"
+DATABASE = os.path.join(BASE_DIR, "main_database.db")
 
 # ==============================
 # DISCORD OAUTH CONFIG
@@ -36,9 +37,13 @@ DISCORD_API_URL = "https://discord.com/api/users/@me"
 # DATABASE
 # ==============================
 def get_db():
-    conn = sqlite3.connect(DATABASE)
-    conn.row_factory = sqlite3.Row
-    return conn
+    try:
+        conn = sqlite3.connect(DATABASE, timeout=10)
+        conn.row_factory = sqlite3.Row
+        return conn
+    except sqlite3.Error as e:
+        print("Erreur BDD:", e)
+        return None
 
 # ==============================
 # LOGIN
@@ -97,39 +102,44 @@ def dashboard():
         return redirect("/login")
 
     db = get_db()
+    if not db:
+        return "Erreur base de données", 500
+
     search = request.args.get("search")
-
-    if search:
-        users = db.execute("""
-            SELECT * FROM user_stats
-            WHERE user_id LIKE ?
-            OR (username IS NOT NULL AND LOWER(username) LIKE LOWER(?))
-            LIMIT 50
-        """, (f"%{search}%", f"%{search}%")).fetchall()
-    else:
-        users = db.execute("SELECT * FROM user_stats LIMIT 50").fetchall()
-
-    leveling_row = db.execute("SELECT leveling_config FROM guild_settings LIMIT 1").fetchone()
-    leveling = json.loads(leveling_row["leveling_config"]) if leveling_row else {"enabled": False}
-
-    # SAFE marriages count
     try:
-        row = db.execute("SELECT COUNT(*) FROM marriages").fetchone()
-        marriages_count = row[0] if row else 0
+        if search:
+            users = db.execute("""
+                SELECT * FROM user_stats
+                WHERE user_id LIKE ?
+                OR (username IS NOT NULL AND LOWER(username) LIKE LOWER(?))
+                LIMIT 50
+            """, (f"%{search}%", f"%{search}%")).fetchall()
+        else:
+            users = db.execute("SELECT * FROM user_stats LIMIT 50").fetchall()
+    except sqlite3.Error as e:
+        print("Erreur BDD:", e)
+        users = []
+
+    # Leveling config
+    try:
+        leveling_row = db.execute("SELECT leveling_config FROM guild_settings LIMIT 1").fetchone()
+        leveling = json.loads(leveling_row["leveling_config"]) if leveling_row else {"enabled": False}
+    except:
+        leveling = {"enabled": False}
+
+    # SAFE counts
+    try:
+        marriages_count = db.execute("SELECT COUNT(*) FROM marriages").fetchone()[0]
     except:
         marriages_count = 0
 
-    # SAFE prison count
     try:
-        row = db.execute("SELECT COUNT(*) FROM prison").fetchone()
-        prison_count = row[0] if row else 0
+        prison_count = db.execute("SELECT COUNT(*) FROM prison").fetchone()[0]
     except:
         prison_count = 0
 
-    # SAFE total balance
     try:
-        row = db.execute("SELECT SUM(balance) FROM user_stats").fetchone()
-        total_balance = row[0] if row and row[0] else 0
+        total_balance = db.execute("SELECT SUM(balance) FROM user_stats").fetchone()[0] or 0
     except:
         total_balance = 0
 
@@ -164,9 +174,13 @@ def update_balance():
         return redirect(url_for("dashboard"))
 
     db = get_db()
-    db.execute("UPDATE user_stats SET balance = ? WHERE user_id = ?", (balance, user_id))
-    db.commit()
-    db.close()
+    if db:
+        try:
+            db.execute("UPDATE user_stats SET balance = ? WHERE user_id = ?", (balance, user_id))
+            db.commit()
+        except sqlite3.Error as e:
+            print("Erreur BDD:", e)
+        db.close()
 
     flash(f"Balance de l'utilisateur {user_id} mise à jour !", "success")
     return redirect(url_for("dashboard"))
@@ -180,29 +194,36 @@ def toggle_leveling():
         return redirect("/login")
 
     db = get_db()
-    row = db.execute("SELECT guild_id, leveling_config FROM guild_settings LIMIT 1").fetchone()
+    if not db:
+        flash("Erreur base de données", "danger")
+        return redirect(url_for("dashboard"))
 
-    if row:
-        config = json.loads(row["leveling_config"])
-        config["enabled"] = not config.get("enabled", False)
-        db.execute(
-            "UPDATE guild_settings SET leveling_config = ? WHERE guild_id = ?",
-            (json.dumps(config), row["guild_id"])
-        )
-    else:
-        config = {"enabled": True}
-        db.execute(
-            "INSERT INTO guild_settings (guild_id, leveling_config) VALUES (?, ?)",
-            (1, json.dumps(config))
-        )
+    try:
+        row = db.execute("SELECT guild_id, leveling_config FROM guild_settings LIMIT 1").fetchone()
+        if row:
+            config = json.loads(row["leveling_config"])
+            config["enabled"] = not config.get("enabled", False)
+            db.execute(
+                "UPDATE guild_settings SET leveling_config = ? WHERE guild_id = ?",
+                (json.dumps(config), row["guild_id"])
+            )
+        else:
+            config = {"enabled": True}
+            db.execute(
+                "INSERT INTO guild_settings (guild_id, leveling_config) VALUES (?, ?)",
+                (1, json.dumps(config))
+            )
+        db.commit()
+    except sqlite3.Error as e:
+        print("Erreur BDD:", e)
+    finally:
+        db.close()
 
-    db.commit()
-    db.close()
     return redirect(url_for("dashboard"))
 
 # ==============================
-# RUN
+# RUN (Render ready)
 # ==============================
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 10000))
+    port = int(os.environ.get("PORT", 10000))  # Render définit le PORT automatiquement
     app.run(host="0.0.0.0", port=port)

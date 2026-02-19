@@ -12,8 +12,9 @@ DATABASE = "database.db"
 # DISCORD OAUTH CONFIG
 # ==============================
 
-CLIENT_ID = "TON_CLIENT_ID"
-CLIENT_SECRET = "TON_CLIENT_SECRET"
+app.secret_key = os.environ.get("SESSION_SECRET")
+CLIENT_ID = os.environ.get("CLIENT_ID")
+CLIENT_SECRET = os.environ.get("CLIENT_SECRET")
 REDIRECT_URI = "https://lounge-senpai-2.onrender.com/callback"
 
 DISCORD_AUTH_URL = "https://discord.com/api/oauth2/authorize"

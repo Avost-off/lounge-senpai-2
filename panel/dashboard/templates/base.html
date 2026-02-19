@@ -1,20 +1,36 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Bot Panel</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <title>Panel Bot</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
-<body class="bg-dark text-white">
+<body>
 
-<nav class="navbar navbar-dark bg-black p-3">
-    <span class="navbar-brand">Bot Dashboard</span>
-    <div>
-        {{ user.username }}
-        <a href="/logout" class="btn btn-danger btn-sm">Logout</a>
-    </div>
-</nav>
+<div class="sidebar">
+    <h2>Dashboard</h2>
+    <a href="/dashboard/">🏠 Dashboard</a>
 
-<div class="container mt-4">
+    <h3>Membres</h3>
+    <a href="/members/search/">🔎 Recherche</a>
+    <a href="/members/levels/">🧠 Niveaux</a>
+    <a href="/members/economy/">💰 Économie</a>
+
+    <h3>Modération</h3>
+    <a href="/moderation/prison/">🔒 Prison</a>
+    <a href="/moderation/warn/">⚠ Warn</a>
+    <a href="/moderation/logs/">📜 Logs</a>
+    <a href="/moderation/roles/">🎭 Rôles</a>
+
+    <h3>Configuration</h3>
+    <a href="/configuration/commands/">🛠 Commandes</a>
+    <a href="/configuration/permissions/">🔐 Permissions</a>
+    <a href="/configuration/security/">🛡 Sécurité</a>
+
+    <h3>Statistiques</h3>
+    <a href="/statistics/">📊 Statistiques</a>
+</div>
+
+<div class="content">
     {% block content %}{% endblock %}
 </div>
 

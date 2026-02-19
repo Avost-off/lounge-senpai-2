@@ -10,7 +10,7 @@ from flask import Flask, render_template, redirect, request, session, url_for, f
 app = Flask(__name__)
 app.secret_key = os.environ.get("SESSION_SECRET", "CHANGE_THIS_SECRET_KEY")
 
-DATABASE = "database.db"
+DATABASE = "main_database.db"
 
 # ==============================
 # DISCORD OAUTH CONFIG

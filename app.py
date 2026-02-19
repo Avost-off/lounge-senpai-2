@@ -14,7 +14,7 @@ DATABASE = "database.db"
 
 CLIENT_ID = "TON_CLIENT_ID"
 CLIENT_SECRET = "TON_CLIENT_SECRET"
-REDIRECT_URI = "https://TON_APP.onrender.com/callback"
+REDIRECT_URI = "https://lounge-senpai-2.onrender.com/callback"
 
 DISCORD_AUTH_URL = "https://discord.com/api/oauth2/authorize"
 DISCORD_TOKEN_URL = "https://discord.com/api/oauth2/token"

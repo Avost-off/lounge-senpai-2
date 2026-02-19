@@ -15,8 +15,16 @@ DATABASE = "main_database.db"
 # ==============================
 # DISCORD OAUTH CONFIG
 # ==============================
+import os
+from flask import abort
+
 CLIENT_ID = os.environ.get("CLIENT_ID")
 CLIENT_SECRET = os.environ.get("CLIENT_SECRET")
+SESSION_SECRET = os.environ.get("SESSION_SECRET")
+
+if not CLIENT_ID or not CLIENT_SECRET or not SESSION_SECRET:
+    raise RuntimeError("Les variables d'environnement CLIENT_ID, CLIENT_SECRET ou SESSION_SECRET ne sont pas définies !")
+
 REDIRECT_URI = os.environ.get("REDIRECT_URI", "https://lounge-senpai-2.onrender.com/callback")
 
 DISCORD_AUTH_URL = "https://discord.com/api/oauth2/authorize"

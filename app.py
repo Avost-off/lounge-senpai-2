@@ -220,10 +220,3 @@ def toggle_leveling():
         db.close()
 
     return redirect(url_for("dashboard"))
-
-# ==============================
-# RUN (Render ready)
-# ==============================
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 10000))  # Render définit le PORT automatiquement
-    app.run(host="0.0.0.0", port=port)

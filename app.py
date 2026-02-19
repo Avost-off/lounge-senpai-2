@@ -98,6 +98,7 @@ def dashboard():
         return redirect("/login")
 
     db = get_db()
+
     search = request.args.get("search")
 
     if search:
@@ -116,16 +117,26 @@ def dashboard():
         SELECT leveling_config FROM guild_settings LIMIT 1
     """).fetchone()
 
-    db.close()
-
     leveling = json.loads(leveling_row["leveling_config"]) if leveling_row else {"enabled": False}
 
+    # 🔥 AJOUTE ICI
+    marriages_count = db.execute("SELECT COUNT(*) as count FROM marriages").fetchone()["count"]
+    prison_count = db.execute("SELECT COUNT(*) as count FROM prison").fetchone()["count"]
+    total_balance = db.execute("SELECT SUM(balance) as total FROM user_stats").fetchone()["total"] or 0
+
+    db.close()
+
+    # 🔥 REMPLACE TON ANCIEN RETURN PAR CELUI-CI
     return render_template(
         "dashboard.html",
         users=users,
         leveling=leveling,
+        marriages_count=marriages_count,
+        prison_count=prison_count,
+        total_balance=total_balance,
         user=session["user"]
     )
+
 
 # ==============================
 # UPDATE BALANCE

@@ -4,118 +4,26 @@
 <meta charset="UTF-8">
 <title>Dashboard</title>
 <style>
-    body {
-        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
-        margin: 0;
-        background-color: #f4f6f8;
-        color: #333;
-    }
-
-    header {
-        background-color: #1f2937;
-        color: white;
-        padding: 1rem 2rem;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-    }
-
-    header h1 {
-        margin: 0;
-        font-size: 1.8rem;
-    }
-
-    nav a {
-        color: white;
-        margin-left: 1rem;
-        text-decoration: none;
-        font-weight: bold;
-    }
-
-    nav a:hover {
-        text-decoration: underline;
-    }
-
-    main {
-        padding: 2rem;
-    }
-
-    .stats {
-        display: flex;
-        gap: 2rem;
-        margin-bottom: 2rem;
-    }
-
-    .stat-card {
-        background-color: white;
-        padding: 1rem 2rem;
-        border-radius: 8px;
-        box-shadow: 0 2px 6px rgba(0,0,0,0.1);
-        flex: 1;
-        text-align: center;
-    }
-
-    .stat-card h2 {
-        margin: 0;
-        font-size: 2rem;
-        color: #4CAF50;
-    }
-
-    .stat-card p {
-        margin: 0.5rem 0 0 0;
-        color: #555;
-    }
-
-    table {
-        width: 100%;
-        border-collapse: collapse;
-        background-color: white;
-        border-radius: 8px;
-        overflow: hidden;
-    }
-
-    th, td {
-        padding: 0.75rem;
-        border-bottom: 1px solid #ddd;
-        text-align: center;
-    }
-
-    th {
-        background-color: #f2f2f2;
-    }
-
-    tr:hover {
-        background-color: #f9f9f9;
-    }
-
-    form {
-        display: inline-block;
-        margin: 0;
-    }
-
-    input[type="number"] {
-        padding: 0.25rem;
-        width: 60px;
-    }
-
-    button {
-        padding: 0.25rem 0.5rem;
-        margin-left: 0.25rem;
-        border: none;
-        border-radius: 4px;
-        background-color: #4CAF50;
-        color: white;
-        cursor: pointer;
-    }
-
-    button:hover {
-        background-color: #45a049;
-    }
-
-    .toggle-button {
-        margin-top: 1rem;
-    }
-
+    body { font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif; margin:0; background:#f4f6f8; color:#333; }
+    header { background:#1f2937; color:white; padding:1rem 2rem; display:flex; justify-content:space-between; align-items:center; }
+    header h1 { margin:0; font-size:1.8rem; }
+    nav a { color:white; margin-left:1rem; text-decoration:none; font-weight:bold; cursor:pointer; }
+    nav a:hover { text-decoration:underline; }
+    main { padding:2rem; }
+    .stats { display:flex; gap:2rem; margin-bottom:2rem; flex-wrap:wrap; }
+    .stat-card { background:white; padding:1rem 2rem; border-radius:8px; box-shadow:0 2px 6px rgba(0,0,0,0.1); flex:1; text-align:center; }
+    .stat-card h2 { margin:0; font-size:2rem; color:#4CAF50; }
+    .stat-card p { margin:0.5rem 0 0 0; color:#555; }
+    table { width:100%; border-collapse:collapse; background:white; border-radius:8px; overflow:hidden; margin-top:1rem; }
+    th, td { padding:0.75rem; border-bottom:1px solid #ddd; text-align:center; }
+    th { background:#f2f2f2; }
+    tr:hover { background:#f9f9f9; }
+    form { display:inline-block; margin:0; }
+    input[type="number"], input[type="text"] { padding:0.25rem; width:80px; }
+    button { padding:0.25rem 0.5rem; margin-left:0.25rem; border:none; border-radius:4px; background:#4CAF50; color:white; cursor:pointer; }
+    button:hover { background:#45a049; }
+    section { display:none; margin-top:2rem; }
+    section.active { display:block; }
 </style>
 </head>
 <body>
@@ -124,42 +32,26 @@
     <h1>Dashboard</h1>
     <nav>
         <span>{{ user.username if user.username else "Inconnu" }}</span>
+        <a onclick="showSection('membres')">Membres</a>
+        <a onclick="showSection('moderation')">Modération</a>
+        <a onclick="showSection('configuration')">Configuration</a>
+        <a onclick="showSection('statistiques')">Statistiques</a>
         <a href="{{ url_for('logout') }}">Déconnexion</a>
     </nav>
 </header>
 
 <main>
 
-    <!-- Stats rapides -->
+    <!-- Stats globales -->
     <div class="stats">
-        <div class="stat-card">
-            <h2>{{ total_balance }}</h2>
-            <p>Balance totale</p>
-        </div>
-        <div class="stat-card">
-            <h2>{{ prison_count }}</h2>
-            <p>Utilisateurs en prison</p>
-        </div>
-        <div class="stat-card">
-            <h2>{{ marriages_count }}</h2>
-            <p>Nombre de mariages</p>
-        </div>
-        <div class="stat-card">
-            <h2>{{ 'Activé' if leveling.enabled else 'Désactivé' }}</h2>
-            <p>Leveling</p>
-        </div>
+        <div class="stat-card"><h2>{{ total_balance }}</h2><p>Balance totale</p></div>
+        <div class="stat-card"><h2>{{ prison_count }}</h2><p>Utilisateurs en prison</p></div>
+        <div class="stat-card"><h2>{{ marriages_count }}</h2><p>Nombre de mariages</p></div>
+        <div class="stat-card"><h2>{{ 'Activé' if leveling.enabled else 'Désactivé' }}</h2><p>Leveling</p></div>
     </div>
 
-    <!-- Onglets du dashboard -->
-    <nav style="margin-bottom: 2rem;">
-        <a href="#membres">Membres</a>
-        <a href="#moderation">Modération</a>
-        <a href="#configuration">Configuration</a>
-        <a href="#statistiques">Statistiques</a>
-    </nav>
-
     <!-- Section Membres -->
-    <section id="membres">
+    <section id="membres" class="active">
         <h2>Membres</h2>
         <form method="GET" action="{{ url_for('dashboard') }}">
             <input type="text" name="search" placeholder="Rechercher ID ou username">
@@ -167,14 +59,7 @@
         </form>
         <table>
             <thead>
-                <tr>
-                    <th>Guild</th>
-                    <th>User</th>
-                    <th>XP</th>
-                    <th>Level</th>
-                    <th>Balance</th>
-                    <th>Actions</th>
-                </tr>
+                <tr><th>Guild</th><th>User</th><th>XP</th><th>Level</th><th>Balance</th><th>Actions</th></tr>
             </thead>
             <tbody>
                 {% for u in users %}
@@ -198,32 +83,40 @@
     </section>
 
     <!-- Section Modération -->
-    <section id="moderation" style="margin-top:2rem;">
+    <section id="moderation">
         <h2>Modération</h2>
-        <p>Gestion de la prison, warns, logs et rôles.</p>
-        <!-- Tu peux ajouter ici les tableaux ou boutons pour chaque action -->
+        <p>Gérer la prison, warns, logs et rôles.</p>
+        <!-- Tu peux ajouter ici les tableaux ou formulaires spécifiques pour chaque action -->
     </section>
 
     <!-- Section Configuration -->
-    <section id="configuration" style="margin-top:2rem;">
+    <section id="configuration">
         <h2>Configuration</h2>
-        <p>Commandes, permissions et sécurité.</p>
+        <p>Gérer commandes, permissions et sécurité.</p>
         <!-- Ajouter les formulaires ou boutons selon tes besoins -->
     </section>
 
     <!-- Section Statistiques -->
-    <section id="statistiques" style="margin-top:2rem;">
+    <section id="statistiques">
         <h2>Statistiques</h2>
         <p>Affichage des données globales et graphiques si besoin.</p>
     </section>
 
     <!-- Toggle leveling -->
-    <form class="toggle-button" action="{{ url_for('toggle_leveling') }}" method="POST">
+    <form style="margin-top:1rem;" action="{{ url_for('toggle_leveling') }}" method="POST">
         <button type="submit">
             {% if leveling.enabled %} Désactiver Leveling {% else %} Activer Leveling {% endif %}
         </button>
     </form>
 
 </main>
+
+<script>
+function showSection(id) {
+    document.querySelectorAll('section').forEach(sec => sec.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+}
+</script>
+
 </body>
 </html>

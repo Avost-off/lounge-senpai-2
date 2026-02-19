@@ -190,6 +190,10 @@ def toggle_leveling():
     db.commit()
     db.close()
 
+    marriages_count = db.execute("SELECT COUNT(*) as count FROM marriages").fetchone()["count"]
+    prison_count = db.execute("SELECT COUNT(*) as count FROM prison").fetchone()["count"]
+    total_balance = db.execute("SELECT SUM(balance) as total FROM user_stats").fetchone()["total"] or 0
+
     return redirect("/")
 
 # ==============================

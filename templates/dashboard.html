@@ -1,30 +1,109 @@
 <!DOCTYPE html>
-<html>
+<html lang="fr">
 <head>
-    <title>Bot Panel</title>
+    <meta charset="UTF-8">
+    <title>Dashboard</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f7f7f7;
+            margin: 0;
+            padding: 0;
+        }
+
+        header {
+            background-color: #4CAF50;
+            color: white;
+            padding: 1rem;
+            text-align: center;
+        }
+
+        main {
+            padding: 2rem;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background-color: white;
+        }
+
+        th, td {
+            padding: 0.75rem;
+            border: 1px solid #ddd;
+            text-align: center;
+        }
+
+        th {
+            background-color: #f2f2f2;
+        }
+
+        tr:hover {
+            background-color: #f9f9f9;
+        }
+
+        form {
+            display: inline-block;
+            margin: 0;
+        }
+
+        input[type="text"], input[type="number"] {
+            padding: 0.25rem;
+            width: 80px;
+        }
+
+        button {
+            padding: 0.25rem 0.5rem;
+            margin-left: 0.25rem;
+        }
+    </style>
 </head>
 <body>
-    <h1>Dashboard</h1>
+    <header>
+        <h1>Dashboard</h1>
+        <p>Connecté en tant que : {{ user.username if user.username else "Inconnu" }}</p>
+    </header>
+    <main>
+        <table>
+            <thead>
+                <tr>
+                    <th>Guild</th>
+                    <th>User</th>
+                    <th>XP</th>
+                    <th>Level</th>
+                    <th>Balance</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for u in users %}
+                <tr>
+                    <td>{{ u["guild_id"] if u["guild_id"] else "N/A" }}</td>
+                    <td>{{ u["username"] if u["username"] else u["user_id"] }}</td>
+                    <td>{{ u["xp"] if u["xp"] else 0 }}</td>
+                    <td>{{ u["level"] if u["level"] else 0 }}</td>
+                    <td>{{ u["balance"] if u["balance"] else 0 }}</td>
+                    <td>
+                        <form action="{{ url_for('update_balance') }}" method="POST">
+                            <input type="hidden" name="user_id" value="{{ u['user_id'] }}">
+                            <input type="number" name="balance" placeholder="{{ u['balance'] }}">
+                            <button type="submit">💰 Update</button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
 
-    <table border="1">
-        <tr>
-            <th>Guild</th>
-            <th>User</th>
-            <th>XP</th>
-            <th>Level</th>
-            <th>Balance</th>
-        </tr>
+        <p>Total balance : {{ total_balance }}</p>
+        <p>Users in prison : {{ prison_count }}</p>
+        <p>Marriages count : {{ marriages_count }}</p>
 
-        {% for user in users %}
-        <tr>
-            <td>{{ user.guild_id }}</td>
-            <td>{{ user.user_id }}</td>
-            <td>{{ user.xp }}</td>
-            <td>{{ user.level }}</td>
-            <td>{{ user.balance }}</td>
-        </tr>
-        {% endfor %}
-    </table>
-
-<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'9d048d07ac0ad11d',t:'MTc3MTQ5MTM4NQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+        <form action="{{ url_for('toggle_leveling') }}" method="POST">
+            <button type="submit">
+                {% if leveling.enabled %} Désactiver Leveling {% else %} Activer Leveling {% endif %}
+            </button>
+        </form>
+    </main>
+</body>
 </html>

@@ -2,7 +2,7 @@ import os
 import sqlite3
 import requests
 import json
-from flask import Flask, render_template, redirect, request, session, url_for, flash
+from flask import Flask, render_template, redirect, request, session, flash, url_for
 
 # ==============================
 # APP FLASK
@@ -20,7 +20,6 @@ CLIENT_SECRET = os.environ.get("CLIENT_SECRET")
 SESSION_SECRET = os.environ.get("SESSION_SECRET")
 REDIRECT_URI = os.environ.get("REDIRECT_URI", "https://lounge-senpai-2.onrender.com/callback")
 
-# Debug pour vérifier que Render prend bien les variables
 print("CLIENT_ID:", CLIENT_ID)
 print("CLIENT_SECRET:", CLIENT_SECRET)
 print("SESSION_SECRET:", SESSION_SECRET)
@@ -90,7 +89,7 @@ def logout():
     return redirect("/login")
 
 # ==============================
-# DASHBOARD
+# DASHBOARD / PANEL
 # ==============================
 @app.route("/", methods=["GET", "POST"])
 def dashboard():
@@ -101,7 +100,6 @@ def dashboard():
     search = request.args.get("search")
 
     if search:
-        # Recherche par user_id OU username, insensible à la casse, ignore NULL
         users = db.execute("""
             SELECT * FROM user_stats
             WHERE user_id LIKE ?
@@ -109,10 +107,7 @@ def dashboard():
             LIMIT 50
         """, (f"%{search}%", f"%{search}%")).fetchall()
     else:
-        users = db.execute("""
-            SELECT * FROM user_stats
-            LIMIT 50
-        """).fetchall()
+        users = db.execute("SELECT * FROM user_stats LIMIT 50").fetchall()
 
     leveling_row = db.execute("SELECT leveling_config FROM guild_settings LIMIT 1").fetchone()
     leveling = json.loads(leveling_row["leveling_config"]) if leveling_row else {"enabled": False}
@@ -151,7 +146,7 @@ def dashboard():
     )
 
 # ==============================
-# UPDATE BALANCE
+# UPDATE BALANCE (depuis le panel)
 # ==============================
 @app.route("/update_balance", methods=["POST"])
 def update_balance():
@@ -160,30 +155,26 @@ def update_balance():
 
     if not user_id or balance is None:
         flash("Erreur : identifiant ou balance manquant", "danger")
-        return redirect("/")
+        return redirect(url_for("dashboard"))
 
     try:
         balance = int(balance)
     except ValueError:
         flash("Erreur : balance doit être un nombre entier", "danger")
-        return redirect("/")
+        return redirect(url_for("dashboard"))
 
     db = get_db()
-    db.execute("""
-        UPDATE user_stats
-        SET balance = ?
-        WHERE user_id = ?
-    """, (balance, user_id))
+    db.execute("UPDATE user_stats SET balance = ? WHERE user_id = ?", (balance, user_id))
     db.commit()
     db.close()
 
     flash(f"Balance de l'utilisateur {user_id} mise à jour !", "success")
-    return redirect("/")
+    return redirect(url_for("dashboard"))
 
 # ==============================
-# TOGGLE LEVELING
+# TOGGLE LEVELING (depuis le panel)
 # ==============================
-@app.route("/toggle_leveling")
+@app.route("/toggle_leveling", methods=["POST"])
 def toggle_leveling():
     if "user" not in session:
         return redirect("/login")
@@ -199,7 +190,6 @@ def toggle_leveling():
             (json.dumps(config), row["guild_id"])
         )
     else:
-        # Si aucune config existe, on en crée une
         config = {"enabled": True}
         db.execute(
             "INSERT INTO guild_settings (guild_id, leveling_config) VALUES (?, ?)",
@@ -208,7 +198,7 @@ def toggle_leveling():
 
     db.commit()
     db.close()
-    return redirect("/")
+    return redirect(url_for("dashboard"))
 
 # ==============================
 # RUN

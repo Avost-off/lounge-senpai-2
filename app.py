@@ -98,13 +98,13 @@ def dashboard():
         return redirect("/login")
 
     db = get_db()
-
     search = request.args.get("search")
 
     if search:
+        # Recherche par nom d'utilisateur (insensible à la casse)
         users = db.execute("""
             SELECT * FROM user_stats
-            WHERE user_id LIKE ?
+            WHERE LOWER(username) LIKE LOWER(?)
             LIMIT 50
         """, (f"%{search}%",)).fetchall()
     else:
@@ -142,7 +142,6 @@ def dashboard():
 
     db.close()
 
-    # RENDER DASHBOARD
     return render_template(
         "dashboard.html",
         users=users,
@@ -215,7 +214,6 @@ def toggle_leveling():
 
     db.commit()
     db.close()
-
     return redirect("/")
 
 # ==============================

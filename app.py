@@ -162,21 +162,34 @@ def update_balance():
 # ==============================
 @app.route("/toggle_leveling")
 def toggle_leveling():
+    if "user" not in session:
+        return redirect("/login")
+
     db = get_db()
-    row = db.execute("""
-        SELECT leveling_config FROM guild_settings LIMIT 1
-    """).fetchone()
+
+    row = db.execute(
+        "SELECT guild_id, leveling_config FROM guild_settings LIMIT 1"
+    ).fetchone()
 
     if row:
         config = json.loads(row["leveling_config"])
         config["enabled"] = not config.get("enabled", False)
-        db.execute("""
-            UPDATE guild_settings
-            SET leveling_config = ?
-        """, (json.dumps(config),))
-        db.commit()
 
+        db.execute(
+            "UPDATE guild_settings SET leveling_config = ? WHERE guild_id = ?",
+            (json.dumps(config), row["guild_id"])
+        )
+    else:
+        # Si aucune config existe, on en crée une
+        config = {"enabled": True}
+        db.execute(
+            "INSERT INTO guild_settings (guild_id, leveling_config) VALUES (?, ?)",
+            (1, json.dumps(config))
+        )
+
+    db.commit()
     db.close()
+
     return redirect("/")
 
 # ==============================

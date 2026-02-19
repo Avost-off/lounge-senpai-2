@@ -1,69 +1,170 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-    <meta charset="UTF-8">
-    <title>Dashboard</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            background-color: #f7f7f7;
-            margin: 0;
-            padding: 0;
-        }
+<meta charset="UTF-8">
+<title>Dashboard</title>
+<style>
+    body {
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        margin: 0;
+        background-color: #f4f6f8;
+        color: #333;
+    }
 
-        header {
-            background-color: #4CAF50;
-            color: white;
-            padding: 1rem;
-            text-align: center;
-        }
+    header {
+        background-color: #1f2937;
+        color: white;
+        padding: 1rem 2rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
 
-        main {
-            padding: 2rem;
-        }
+    header h1 {
+        margin: 0;
+        font-size: 1.8rem;
+    }
 
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            background-color: white;
-        }
+    nav a {
+        color: white;
+        margin-left: 1rem;
+        text-decoration: none;
+        font-weight: bold;
+    }
 
-        th, td {
-            padding: 0.75rem;
-            border: 1px solid #ddd;
-            text-align: center;
-        }
+    nav a:hover {
+        text-decoration: underline;
+    }
 
-        th {
-            background-color: #f2f2f2;
-        }
+    main {
+        padding: 2rem;
+    }
 
-        tr:hover {
-            background-color: #f9f9f9;
-        }
+    .stats {
+        display: flex;
+        gap: 2rem;
+        margin-bottom: 2rem;
+    }
 
-        form {
-            display: inline-block;
-            margin: 0;
-        }
+    .stat-card {
+        background-color: white;
+        padding: 1rem 2rem;
+        border-radius: 8px;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+        flex: 1;
+        text-align: center;
+    }
 
-        input[type="text"], input[type="number"] {
-            padding: 0.25rem;
-            width: 80px;
-        }
+    .stat-card h2 {
+        margin: 0;
+        font-size: 2rem;
+        color: #4CAF50;
+    }
 
-        button {
-            padding: 0.25rem 0.5rem;
-            margin-left: 0.25rem;
-        }
-    </style>
+    .stat-card p {
+        margin: 0.5rem 0 0 0;
+        color: #555;
+    }
+
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        background-color: white;
+        border-radius: 8px;
+        overflow: hidden;
+    }
+
+    th, td {
+        padding: 0.75rem;
+        border-bottom: 1px solid #ddd;
+        text-align: center;
+    }
+
+    th {
+        background-color: #f2f2f2;
+    }
+
+    tr:hover {
+        background-color: #f9f9f9;
+    }
+
+    form {
+        display: inline-block;
+        margin: 0;
+    }
+
+    input[type="number"] {
+        padding: 0.25rem;
+        width: 60px;
+    }
+
+    button {
+        padding: 0.25rem 0.5rem;
+        margin-left: 0.25rem;
+        border: none;
+        border-radius: 4px;
+        background-color: #4CAF50;
+        color: white;
+        cursor: pointer;
+    }
+
+    button:hover {
+        background-color: #45a049;
+    }
+
+    .toggle-button {
+        margin-top: 1rem;
+    }
+
+</style>
 </head>
 <body>
-    <header>
-        <h1>Dashboard</h1>
-        <p>Connecté en tant que : {{ user.username if user.username else "Inconnu" }}</p>
-    </header>
-    <main>
+
+<header>
+    <h1>Dashboard</h1>
+    <nav>
+        <span>{{ user.username if user.username else "Inconnu" }}</span>
+        <a href="{{ url_for('logout') }}">Déconnexion</a>
+    </nav>
+</header>
+
+<main>
+
+    <!-- Stats rapides -->
+    <div class="stats">
+        <div class="stat-card">
+            <h2>{{ total_balance }}</h2>
+            <p>Balance totale</p>
+        </div>
+        <div class="stat-card">
+            <h2>{{ prison_count }}</h2>
+            <p>Utilisateurs en prison</p>
+        </div>
+        <div class="stat-card">
+            <h2>{{ marriages_count }}</h2>
+            <p>Nombre de mariages</p>
+        </div>
+        <div class="stat-card">
+            <h2>{{ 'Activé' if leveling.enabled else 'Désactivé' }}</h2>
+            <p>Leveling</p>
+        </div>
+    </div>
+
+    <!-- Onglets du dashboard -->
+    <nav style="margin-bottom: 2rem;">
+        <a href="#membres">Membres</a>
+        <a href="#moderation">Modération</a>
+        <a href="#configuration">Configuration</a>
+        <a href="#statistiques">Statistiques</a>
+    </nav>
+
+    <!-- Section Membres -->
+    <section id="membres">
+        <h2>Membres</h2>
+        <form method="GET" action="{{ url_for('dashboard') }}">
+            <input type="text" name="search" placeholder="Rechercher ID ou username">
+            <button type="submit">🔍 Rechercher</button>
+        </form>
         <table>
             <thead>
                 <tr>
@@ -94,16 +195,35 @@
                 {% endfor %}
             </tbody>
         </table>
+    </section>
 
-        <p>Total balance : {{ total_balance }}</p>
-        <p>Users in prison : {{ prison_count }}</p>
-        <p>Marriages count : {{ marriages_count }}</p>
+    <!-- Section Modération -->
+    <section id="moderation" style="margin-top:2rem;">
+        <h2>Modération</h2>
+        <p>Gestion de la prison, warns, logs et rôles.</p>
+        <!-- Tu peux ajouter ici les tableaux ou boutons pour chaque action -->
+    </section>
 
-        <form action="{{ url_for('toggle_leveling') }}" method="POST">
-            <button type="submit">
-                {% if leveling.enabled %} Désactiver Leveling {% else %} Activer Leveling {% endif %}
-            </button>
-        </form>
-    </main>
+    <!-- Section Configuration -->
+    <section id="configuration" style="margin-top:2rem;">
+        <h2>Configuration</h2>
+        <p>Commandes, permissions et sécurité.</p>
+        <!-- Ajouter les formulaires ou boutons selon tes besoins -->
+    </section>
+
+    <!-- Section Statistiques -->
+    <section id="statistiques" style="margin-top:2rem;">
+        <h2>Statistiques</h2>
+        <p>Affichage des données globales et graphiques si besoin.</p>
+    </section>
+
+    <!-- Toggle leveling -->
+    <form class="toggle-button" action="{{ url_for('toggle_leveling') }}" method="POST">
+        <button type="submit">
+            {% if leveling.enabled %} Désactiver Leveling {% else %} Activer Leveling {% endif %}
+        </button>
+    </form>
+
+</main>
 </body>
 </html>

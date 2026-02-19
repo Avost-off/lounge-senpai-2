@@ -60,35 +60,38 @@
 <div class="container mt-4">
 
     <!-- STATS CARDS -->
-    <div class="row mb-4">
+<div class="row mb-4">
 
-        <div class="col-md-4">
-            <div class="card p-4">
-                <h6>Total utilisateurs</h6>
-                <h3>{{ users|length }}</h3>
-            </div>
+    <div class="col-md-3">
+        <div class="card p-4">
+            <h6>Utilisateurs</h6>
+            <div class="stat-number">{{ users|length }}</div>
         </div>
-
-        <div class="col-md-4">
-            <div class="card p-4">
-                <h6>Leveling</h6>
-                {% if leveling.enabled %}
-                    <span class="badge bg-success">Activé</span>
-                {% else %}
-                    <span class="badge bg-danger">Désactivé</span>
-                {% endif %}
-            </div>
-        </div>
-
-        <div class="col-md-4">
-            <div class="card p-4 text-center">
-                <a href="/toggle_leveling" class="btn btn-warning btn-custom">
-                    <i class="bi bi-gear"></i> Toggle Leveling
-                </a>
-            </div>
-        </div>
-
     </div>
+
+    <div class="col-md-3">
+        <div class="card p-4">
+            <h6>Balance Totale</h6>
+            <div class="stat-number">{{ total_balance }}</div>
+        </div>
+    </div>
+
+    <div class="col-md-3">
+        <div class="card p-4">
+            <h6>Mariages</h6>
+            <div class="stat-number">{{ marriages_count }}</div>
+        </div>
+    </div>
+
+    <div class="col-md-3">
+        <div class="card p-4">
+            <h6>Prison</h6>
+            <div class="stat-number">{{ prison_count }}</div>
+        </div>
+    </div>
+
+</div>
+
 
     <!-- SEARCH -->
     <div class="card p-4 mb-4">

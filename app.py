@@ -119,10 +119,26 @@ def dashboard():
 
     leveling = json.loads(leveling_row["leveling_config"]) if leveling_row else {"enabled": False}
 
-    # 🔥 AJOUTE ICI
-    marriages_count = db.execute("SELECT COUNT(*) as count FROM marriages").fetchone()["count"]
-    prison_count = db.execute("SELECT COUNT(*) as count FROM prison").fetchone()["count"]
-    total_balance = db.execute("SELECT SUM(balance) as total FROM user_stats").fetchone()["total"] or 0
+    # SAFE marriages count
+try:
+    row = db.execute("SELECT COUNT(*) FROM marriages").fetchone()
+    marriages_count = row[0] if row else 0
+except:
+    marriages_count = 0
+
+# SAFE prison count
+try:
+    row = db.execute("SELECT COUNT(*) FROM prison").fetchone()
+    prison_count = row[0] if row else 0
+except:
+    prison_count = 0
+
+# SAFE total balance
+try:
+    row = db.execute("SELECT SUM(balance) FROM user_stats").fetchone()
+    total_balance = row[0] if row and row[0] else 0
+except:
+    total_balance = 0
 
     db.close()
 

@@ -15,20 +15,19 @@ DATABASE = "database.db"
 # ==============================
 # DISCORD OAUTH CONFIG
 # ==============================
-
 CLIENT_ID = os.environ.get("CLIENT_ID")
 CLIENT_SECRET = os.environ.get("CLIENT_SECRET")
 SESSION_SECRET = os.environ.get("SESSION_SECRET")
+REDIRECT_URI = os.environ.get("REDIRECT_URI", "https://lounge-senpai-2.onrender.com/callback")
 
+# Debug pour vérifier que Render prend bien les variables
 print("CLIENT_ID:", CLIENT_ID)
 print("CLIENT_SECRET:", CLIENT_SECRET)
 print("SESSION_SECRET:", SESSION_SECRET)
+print("REDIRECT_URI:", REDIRECT_URI)
 
 if not CLIENT_ID or not CLIENT_SECRET or not SESSION_SECRET:
     raise RuntimeError("Les variables d'environnement CLIENT_ID, CLIENT_SECRET ou SESSION_SECRET ne sont pas définies !")
-
-
-REDIRECT_URI = os.environ.get("REDIRECT_URI", "https://lounge-senpai-2.onrender.com/callback")
 
 DISCORD_AUTH_URL = "https://discord.com/api/oauth2/authorize"
 DISCORD_TOKEN_URL = "https://discord.com/api/oauth2/token"
@@ -58,7 +57,7 @@ def callback():
     code = request.args.get("code")
     if not code:
         flash("Erreur OAuth : code manquant", "danger")
-        return redirect("/")
+        return redirect("/login")
 
     data = {
         "client_id": CLIENT_ID,

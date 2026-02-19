@@ -101,22 +101,20 @@ def dashboard():
     search = request.args.get("search")
 
     if search:
-        # Recherche par nom d'utilisateur (insensible à la casse)
+        # Recherche par user_id OU username, insensible à la casse, ignore NULL
         users = db.execute("""
             SELECT * FROM user_stats
-            WHERE LOWER(username) LIKE LOWER(?)
+            WHERE user_id LIKE ?
+            OR (username IS NOT NULL AND LOWER(username) LIKE LOWER(?))
             LIMIT 50
-        """, (f"%{search}%",)).fetchall()
+        """, (f"%{search}%", f"%{search}%")).fetchall()
     else:
         users = db.execute("""
             SELECT * FROM user_stats
             LIMIT 50
         """).fetchall()
 
-    leveling_row = db.execute("""
-        SELECT leveling_config FROM guild_settings LIMIT 1
-    """).fetchone()
-
+    leveling_row = db.execute("SELECT leveling_config FROM guild_settings LIMIT 1").fetchone()
     leveling = json.loads(leveling_row["leveling_config"]) if leveling_row else {"enabled": False}
 
     # SAFE marriages count
@@ -191,15 +189,11 @@ def toggle_leveling():
         return redirect("/login")
 
     db = get_db()
-
-    row = db.execute(
-        "SELECT guild_id, leveling_config FROM guild_settings LIMIT 1"
-    ).fetchone()
+    row = db.execute("SELECT guild_id, leveling_config FROM guild_settings LIMIT 1").fetchone()
 
     if row:
         config = json.loads(row["leveling_config"])
         config["enabled"] = not config.get("enabled", False)
-
         db.execute(
             "UPDATE guild_settings SET leveling_config = ? WHERE guild_id = ?",
             (json.dumps(config), row["guild_id"])

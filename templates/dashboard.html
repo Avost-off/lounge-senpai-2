@@ -19,7 +19,6 @@
 }
 
 *{box-sizing:border-box;margin:0;padding:0;font-family:'Inter',sans-serif;}
-
 body{background:var(--bg);color:var(--text);display:flex;}
 
 /* SIDEBAR */
@@ -30,7 +29,6 @@ body{background:var(--bg);color:var(--text);display:flex;}
     padding:25px;
     display:flex;
     flex-direction:column;
-    transition:0.3s;
 }
 
 .logo{
@@ -51,13 +49,8 @@ body{background:var(--bg);color:var(--text);display:flex;}
     transition:0.2s;
 }
 
-.nav-item:hover{
-    background:var(--hover);
-}
-
-.nav-item.active{
-    background:var(--accent);
-}
+.nav-item:hover{background:var(--hover);}
+.nav-item.active{background:var(--accent);}
 
 /* MAIN */
 .main{
@@ -72,11 +65,6 @@ body{background:var(--bg);color:var(--text);display:flex;}
     justify-content:space-between;
     align-items:center;
     margin-bottom:30px;
-}
-
-.header h1{
-    font-size:26px;
-    font-weight:700;
 }
 
 .user-badge{
@@ -107,16 +95,8 @@ body{background:var(--bg);color:var(--text);display:flex;}
     box-shadow:0 10px 25px rgba(0,0,0,0.4);
 }
 
-.card-title{
-    font-size:14px;
-    color:var(--muted);
-    margin-bottom:10px;
-}
-
-.card-value{
-    font-size:28px;
-    font-weight:700;
-}
+.card-title{font-size:14px;color:var(--muted);margin-bottom:10px;}
+.card-value{font-size:28px;font-weight:700;}
 
 /* TABLE */
 .table-container{
@@ -125,10 +105,7 @@ body{background:var(--bg);color:var(--text);display:flex;}
     padding:20px;
 }
 
-table{
-    width:100%;
-    border-collapse:collapse;
-}
+table{width:100%;border-collapse:collapse;}
 
 th{
     text-align:left;
@@ -143,9 +120,7 @@ td{
     font-size:14px;
 }
 
-tr:hover{
-    background:var(--hover);
-}
+tr:hover{background:var(--hover);}
 
 .badge{
     padding:5px 10px;
@@ -153,13 +128,11 @@ tr:hover{
     font-size:12px;
 }
 
-.badge-level{
-    background:var(--accent);
-}
-
-.badge-money{
-    background:var(--green);
-}
+.badge-level{background:var(--accent);}
+.badge-money{background:var(--green);}
+.badge-role{background:#444;}
+.badge-enabled{background:var(--green);}
+.badge-disabled{background:var(--red);}
 
 .action-btn{
     background:var(--accent);
@@ -168,18 +141,11 @@ tr:hover{
     border-radius:8px;
     cursor:pointer;
     color:white;
-    transition:0.2s;
 }
 
-.action-btn:hover{
-    background:#4752c4;
-}
+.action-btn:hover{background:#4752c4;}
 
-/* SEARCH */
-.search{
-    margin-bottom:15px;
-}
-
+.search{margin-bottom:15px;}
 .search input{
     width:100%;
     padding:10px 15px;
@@ -200,11 +166,12 @@ section.active{display:block;}
 <div class="sidebar">
     <div class="logo">Bot Dashboard</div>
 
-    <div class="nav-item active" onclick="showSection('overview')">🏠 Overview</div>
-    <div class="nav-item" onclick="showSection('members')">👥 Members</div>
-    <div class="nav-item" onclick="showSection('moderation')">🛡️ Moderation</div>
-    <div class="nav-item" onclick="showSection('settings')">⚙️ Settings</div>
-    <div class="nav-item" onclick="showSection('stats')">📊 Analytics</div>
+    <div class="nav-item active" onclick="showSection(event,'overview')">🏠 Overview</div>
+    <div class="nav-item" onclick="showSection(event,'members')">👥 Members</div>
+    <div class="nav-item" onclick="showSection(event,'commands')">⚡ Commands</div>
+    <div class="nav-item" onclick="showSection(event,'moderation')">🛡️ Moderation</div>
+    <div class="nav-item" onclick="showSection(event,'settings')">⚙️ Settings</div>
+    <div class="nav-item" onclick="showSection(event,'stats')">📊 Analytics</div>
 </div>
 
 <div class="main">
@@ -216,23 +183,19 @@ section.active{display:block;}
 
 <!-- OVERVIEW -->
 <section id="overview" class="active">
-
 <div class="stats">
     <div class="card">
         <div class="card-title">Total Balance</div>
         <div class="card-value">{{ total_balance }}</div>
     </div>
-
     <div class="card">
         <div class="card-title">Users in Prison</div>
         <div class="card-value">{{ prison_count }}</div>
     </div>
-
     <div class="card">
         <div class="card-title">Marriages</div>
         <div class="card-value">{{ marriages_count }}</div>
     </div>
-
     <div class="card">
         <div class="card-title">Leveling</div>
         <div class="card-value">
@@ -244,53 +207,92 @@ section.active{display:block;}
         </div>
     </div>
 </div>
-
 </section>
 
 <!-- MEMBERS -->
 <section id="members">
-
 <div class="table-container">
-
 <div class="search">
     <input type="text" id="searchInput" placeholder="Search members...">
 </div>
-
 <table id="membersTable">
-    <thead>
-        <tr>
-            <th>User</th>
-            <th>Guild</th>
-            <th>XP</th>
-            <th>Level</th>
-            <th>Balance</th>
-            <th>Action</th>
-        </tr>
-    </thead>
-    <tbody>
-        {% for u in users %}
-        <tr>
-            <td>{{ u.username }}</td>
-            <td>{{ u.guild_id }}</td>
-            <td>{{ u.xp }}</td>
-            <td><span class="badge badge-level">{{ u.level }}</span></td>
-            <td><span class="badge badge-money">{{ u.balance }}</span></td>
-            <td>
-                <form action="{{ url_for('update_balance') }}" method="POST">
-                    <input type="hidden" name="user_id" value="{{ u.user_id }}">
-                    <button class="action-btn">Edit</button>
-                </form>
-            </td>
-        </tr>
-        {% endfor %}
-    </tbody>
+<thead>
+<tr>
+<th>User</th>
+<th>Guild</th>
+<th>XP</th>
+<th>Level</th>
+<th>Balance</th>
+<th>Action</th>
+</tr>
+</thead>
+<tbody>
+{% for u in users %}
+<tr>
+<td>{{ u.username }}</td>
+<td>{{ u.guild_id }}</td>
+<td>{{ u.xp }}</td>
+<td><span class="badge badge-level">{{ u.level }}</span></td>
+<td><span class="badge badge-money">{{ u.balance }}</span></td>
+<td>
+<form action="{{ url_for('update_balance') }}" method="POST">
+<input type="hidden" name="user_id" value="{{ u.user_id }}">
+<button class="action-btn">Edit</button>
+</form>
+</td>
+</tr>
+{% endfor %}
+</tbody>
+</table>
+</div>
+</section>
+
+<!-- COMMANDS -->
+<section id="commands">
+<div class="table-container">
+
+<div class="search">
+<input type="text" id="commandSearch" placeholder="Search commands...">
+</div>
+
+<table id="commandsTable">
+<thead>
+<tr>
+<th>Name</th>
+<th>Category</th>
+<th>Role Required</th>
+<th>Status</th>
+<th>Action</th>
+</tr>
+</thead>
+<tbody>
+{% for cmd in commands %}
+<tr>
+<td>{{ cmd.name }}</td>
+<td>{{ cmd.category }}</td>
+<td><span class="badge badge-role">{{ cmd.required_role }}</span></td>
+<td>
+{% if cmd.enabled %}
+<span class="badge badge-enabled">Enabled</span>
+{% else %}
+<span class="badge badge-disabled">Disabled</span>
+{% endif %}
+</td>
+<td>
+<form action="{{ url_for('toggle_command', cmd_id=cmd.id) }}" method="POST">
+<button class="action-btn">
+{% if cmd.enabled %}Disable{% else %}Enable{% endif %}
+</button>
+</form>
+</td>
+</tr>
+{% endfor %}
+</tbody>
 </table>
 
 </div>
-
 </section>
 
-<!-- OTHER SECTIONS -->
 <section id="moderation"><h2>Moderation Panel</h2></section>
 <section id="settings"><h2>Settings Panel</h2></section>
 <section id="stats"><h2>Advanced Analytics</h2></section>
@@ -298,21 +300,27 @@ section.active{display:block;}
 </div>
 
 <script>
-function showSection(id){
-    document.querySelectorAll('section').forEach(s=>s.classList.remove('active'));
-    document.getElementById(id).classList.add('active');
-
-    document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
-    event.target.classList.add('active');
+function showSection(event,id){
+document.querySelectorAll('section').forEach(s=>s.classList.remove('active'));
+document.getElementById(id).classList.add('active');
+document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+event.currentTarget.classList.add('active');
 }
 
-// Live search
-document.getElementById("searchInput").addEventListener("keyup", function() {
-    let filter = this.value.toLowerCase();
-    let rows = document.querySelectorAll("#membersTable tbody tr");
-    rows.forEach(row => {
-        row.style.display = row.innerText.toLowerCase().includes(filter) ? "" : "none";
-    });
+// Members search
+document.getElementById("searchInput")?.addEventListener("keyup", function() {
+let filter=this.value.toLowerCase();
+document.querySelectorAll("#membersTable tbody tr").forEach(row=>{
+row.style.display=row.innerText.toLowerCase().includes(filter)?"":"none";
+});
+});
+
+// Commands search
+document.getElementById("commandSearch")?.addEventListener("keyup", function() {
+let filter=this.value.toLowerCase();
+document.querySelectorAll("#commandsTable tbody tr").forEach(row=>{
+row.style.display=row.innerText.toLowerCase().includes(filter)?"":"none";
+});
 });
 </script>
 

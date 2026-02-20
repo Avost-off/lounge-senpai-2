@@ -1,8 +1,8 @@
 import os
 import sqlite3
-import requests
 import json
-from flask import Flask, render_template, redirect, request, session, flash, url_for
+import requests
+from flask import Flask, render_template, redirect, request, session, url_for
 
 # ==============================
 # APP FLASK
@@ -10,10 +10,11 @@ from flask import Flask, render_template, redirect, request, session, flash, url
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 app = Flask(__name__, template_folder=os.path.join(BASE_DIR, "templates"))
 app.secret_key = os.environ.get("SESSION_SECRET", "CHANGE_THIS_SECRET_KEY")
+
 DATABASE = os.path.join(BASE_DIR, "main_database.db")
 
 # ==============================
-# DISCORD OAUTH CONFIG
+# DISCORD OAUTH2 CONFIG
 # ==============================
 CLIENT_ID = os.environ.get("CLIENT_ID")
 CLIENT_SECRET = os.environ.get("CLIENT_SECRET")
@@ -37,7 +38,7 @@ def get_db():
 
 def init_db():
     db = get_db()
-    # USERS multi-serveurs
+    # USERS
     db.execute("""
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -112,14 +113,14 @@ def login():
 def callback():
     code = request.args.get("code")
     if not code:
-        return "Erreur OAuth : code manquant"
+        return redirect("/login")
 
     data = {
         "client_id": CLIENT_ID,
         "client_secret": CLIENT_SECRET,
         "grant_type": "authorization_code",
         "code": code,
-        "redirect_uri": REDIRECT_URI,
+        "redirect_uri": REDIRECT_URI
     }
     headers = {"Content-Type": "application/x-www-form-urlencoded"}
     token_resp = requests.post(DISCORD_TOKEN_URL, data=data, headers=headers)
@@ -128,14 +129,13 @@ def callback():
         return "Erreur OAuth : token invalide"
 
     access_token = token_json["access_token"]
-    # User + Guilds
+
     user = requests.get(DISCORD_API_URL, headers={"Authorization": f"Bearer {access_token}"}).json()
     guilds = requests.get(DISCORD_GUILDS_URL, headers={"Authorization": f"Bearer {access_token}"}).json()
 
     session["user"] = user
     session["guilds"] = guilds
     session["token"] = access_token
-
     return redirect("/")
 
 @app.route("/logout")
@@ -146,85 +146,69 @@ def logout():
 # ==============================
 # DASHBOARD
 # ==============================
-@app.route("/")
+@app.route("/", methods=["GET"])
 def dashboard():
     if "user" not in session:
         return redirect("/login")
 
     db = get_db()
-
-    selected_guild = request.args.get("guild_id")
+    guild_id = request.args.get("guild_id")
     search_user = request.args.get("search_user")
     search_cmd = request.args.get("search_cmd")
-    selected_command_id = request.args.get("command_id")
 
-    # Serveurs disponibles
-    guilds = session.get("guilds", [])
-
-    # USERS filtrés par serveur + recherche
+    # USERS
     users_query = "SELECT * FROM users"
-    users_params = []
-    if selected_guild:
+    params = []
+    if guild_id:
         users_query += " WHERE guild_id = ?"
-        users_params.append(selected_guild)
+        params.append(guild_id)
         if search_user:
             users_query += " AND (user_id LIKE ? OR LOWER(username) LIKE LOWER(?))"
-            users_params += [f"%{search_user}%", f"%{search_user}%"]
-    elif search_user:
-        users_query += " WHERE user_id LIKE ? OR LOWER(username) LIKE LOWER(?)"
-        users_params += [f"%{search_user}%", f"%{search_user}%"]
+            params += [f"%{search_user}%", f"%{search_user}%"]
     else:
-        users_query += " LIMIT 50"
-    users = db.execute(users_query, users_params).fetchall()
+        if search_user:
+            users_query += " WHERE user_id LIKE ? OR LOWER(username) LIKE LOWER(?)"
+            params += [f"%{search_user}%", f"%{search_user}%"]
+    users = db.execute(users_query, params).fetchall()
 
-    # COMMANDS filtrées par serveur + recherche + sélection
+    # COMMANDS
     commands_query = "SELECT * FROM commands"
-    commands_params = []
-    if selected_guild:
+    cmd_params = []
+    if guild_id:
         commands_query += " WHERE guild_id = ?"
-        commands_params.append(selected_guild)
+        cmd_params.append(guild_id)
         if search_cmd:
             commands_query += " AND (name LIKE ? OR category LIKE ? OR description LIKE ?)"
-            commands_params += [f"%{search_cmd}%"]*3
-        if selected_command_id:
-            commands_query += " AND id = ?"
-            commands_params.append(selected_command_id)
+            cmd_params += [f"%{search_cmd}%"]*3
     else:
         if search_cmd:
             commands_query += " WHERE name LIKE ? OR category LIKE ? OR description LIKE ?"
-            commands_params += [f"%{search_cmd}%"]*3
-        elif selected_command_id:
-            commands_query += " WHERE id = ?"
-            commands_params.append(selected_command_id)
-        else:
-            commands_query += " LIMIT 50"
-    commands = db.execute(commands_query, commands_params).fetchall()
+            cmd_params += [f"%{search_cmd}%"]*3
+    commands = db.execute(commands_query, cmd_params).fetchall()
 
-    # STATS serveur
-    stats_where = f"WHERE guild_id = '{selected_guild}'" if selected_guild else ""
-    total_balance = db.execute(f"SELECT SUM(balance) FROM users {stats_where}").fetchone()[0] or 0
-    prison_count = db.execute(f"SELECT COUNT(*) FROM prison {stats_where}").fetchone()[0]
-    marriages_count = db.execute(f"SELECT COUNT(*) FROM marriages {stats_where}").fetchone()[0]
+    # STATS
+    total_balance = db.execute("SELECT SUM(balance) FROM users").fetchone()[0] or 0
+    prison_count = db.execute("SELECT COUNT(*) FROM prison").fetchone()[0]
+    marriages_count = db.execute("SELECT COUNT(*) FROM marriages").fetchone()[0]
 
     # LEVELING
-    leveling_row = db.execute("SELECT leveling_config FROM guild_settings WHERE guild_id = ? LIMIT 1", (selected_guild,)).fetchone() if selected_guild else None
+    leveling_row = db.execute("SELECT leveling_config FROM guild_settings LIMIT 1").fetchone()
     leveling = json.loads(leveling_row["leveling_config"]) if leveling_row else {"enabled": False}
 
     db.close()
     return render_template(
         "dashboard.html",
-        guilds=guilds,
-        selected_guild=selected_guild,
         users=users,
         commands=commands,
-        selected_command_id=selected_command_id,
-        search_user=search_user,
-        search_cmd=search_cmd,
         total_balance=total_balance,
         prison_count=prison_count,
         marriages_count=marriages_count,
         leveling=leveling,
-        user=session["user"]
+        user=session["user"],
+        guilds=session.get("guilds", []),
+        selected_guild=guild_id,
+        search_user=search_user,
+        search_cmd=search_cmd
     )
 
 # ==============================

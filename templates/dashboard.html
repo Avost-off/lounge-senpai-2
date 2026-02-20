@@ -1,239 +1,264 @@
-<!DOCTYPE html>
-<html lang="fr">
-<head>
-<meta charset="UTF-8">
-<title>Super Dashboard</title>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+import os
+import sqlite3
+import requests
+import json
+from flask import Flask, render_template, redirect, request, session, flash, url_for
 
-<style>
-:root{
-    --bg:#18191c;
-    --sidebar:#202225;
-    --card:#242526;
-    --hover:#3a3d42;
-    --accent:#5865F2;
-    --green:#3ba55d;
-    --red:#ed4245;
-    --yellow:#f1c40f;
-    --text:#f2f3f5;
-    --muted:#b0b3b8;
-    --shadow:rgba(0,0,0,0.5);
-    --transition:0.3s;
-}
+# ==============================
+# APP FLASK
+# ==============================
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+app = Flask(__name__, template_folder=os.path.join(BASE_DIR, "templates"))
+app.secret_key = os.environ.get("SESSION_SECRET", "CHANGE_THIS_SECRET_KEY")
 
-*{box-sizing:border-box;margin:0;padding:0;font-family:'Inter',sans-serif;}
-body{background:var(--bg);color:var(--text);display:flex;height:100vh;}
+DATABASE = os.path.join(BASE_DIR, "main_database.db")
 
-/* SIDEBAR */
-.sidebar{
-    width:300px;
-    background:var(--sidebar);
-    padding:25px 15px;
-    display:flex;
-    flex-direction:column;
-    transition:var(--transition);
-    box-shadow:2px 0 15px var(--shadow);
-}
-.logo{font-size:28px;font-weight:700;margin-bottom:40px;color:var(--accent);text-align:center;}
-.nav-item{
-    padding:14px 20px;
-    border-radius:12px;
-    margin-bottom:12px;
-    cursor:pointer;
-    display:flex;
-    align-items:center;
-    gap:12px;
-    font-weight:500;
-    color:var(--text);
-    transition:var(--transition);
-}
-.nav-item:hover{background:var(--hover);}
-.nav-item.active{background:var(--accent);color:white;box-shadow:0 4px 12px var(--shadow);transform:translateX(2px);}
+# ==============================
+# DISCORD OAUTH CONFIG
+# ==============================
+CLIENT_ID = os.environ.get("CLIENT_ID")
+CLIENT_SECRET = os.environ.get("CLIENT_SECRET")
+REDIRECT_URI = os.environ.get("REDIRECT_URI")
 
-/* MAIN */
-.main{flex:1;padding:30px 40px;overflow:auto;}
+if not CLIENT_ID or not CLIENT_SECRET or not REDIRECT_URI:
+    raise RuntimeError("Variables OAuth manquantes !")
 
-/* HEADER */
-.header{display:flex;justify-content:space-between;align-items:center;margin-bottom:30px;}
-.header h1{font-size:30px;font-weight:700;}
-.user-badge{background:var(--card);padding:8px 20px;border-radius:25px;font-size:14px;color:var(--muted);font-weight:500;}
+DISCORD_AUTH_URL = "https://discord.com/api/oauth2/authorize"
+DISCORD_TOKEN_URL = "https://discord.com/api/oauth2/token"
+DISCORD_API_URL = "https://discord.com/api/users/@me"
+DISCORD_GUILDS_URL = "https://discord.com/api/users/@me/guilds"
 
-/* STATS CARDS */
-.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:25px;margin-bottom:35px;}
-.card{background:var(--card);padding:25px;border-radius:15px;transition:var(--transition);box-shadow:0 6px 20px var(--shadow);}
-.card:hover{transform:translateY(-8px);box-shadow:0 15px 30px var(--shadow);}
-.card-title{font-size:14px;color:var(--muted);margin-bottom:12px;text-transform:uppercase;letter-spacing:0.5px;}
-.card-value{font-size:30px;font-weight:700;}
+# ==============================
+# DATABASE UTIL
+# ==============================
+def get_db():
+    conn = sqlite3.connect(DATABASE, timeout=10)
+    conn.row_factory = sqlite3.Row
+    return conn
 
-/* TABLES */
-.table-container{background:var(--card);border-radius:15px;padding:20px;box-shadow:0 6px 20px var(--shadow);}
-table{width:100%;border-collapse:collapse;}
-th{text-align:left;font-size:13px;color:var(--muted);padding-bottom:15px;}
-td{padding:15px 0;border-top:1px solid #3f4147;font-size:14px;}
-tr:hover{background:var(--hover);transition:0.2s;}
-.badge{padding:6px 12px;border-radius:25px;font-size:12px;font-weight:600;}
-.badge-level{background:var(--accent);color:white;}
-.badge-money{background:var(--green);color:white;}
-.badge-enabled{background:var(--green);color:white;}
-.badge-disabled{background:var(--red);color:white;}
-.badge-category{padding:4px 10px;border-radius:12px;background:var(--yellow);color:black;font-size:12px;font-weight:600;}
+def init_db():
+    db = get_db()
+    if not db:
+        print("Erreur DB")
+        return
 
-/* ACTION BUTTONS */
-.action-btn{background:var(--accent);border:none;padding:6px 14px;border-radius:8px;cursor:pointer;color:white;transition:var(--transition);font-weight:500;}
-.action-btn:hover{background:#4752c4;}
+    # Tables principales
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            guild_id TEXT,
+            user_id TEXT,
+            username TEXT,
+            xp INTEGER DEFAULT 0,
+            level INTEGER DEFAULT 1,
+            balance INTEGER DEFAULT 0,
+            in_prison INTEGER DEFAULT 0,
+            UNIQUE(guild_id, user_id)
+        )
+    """)
 
-/* SEARCH */
-.search{margin-bottom:20px;}
-.search input{width:100%;padding:12px 18px;border-radius:15px;border:none;background:#2c2f33;color:white;outline:none;transition:var(--transition);}
-.search input:focus{background:#3a3d42;}
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS commands (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            guild_id TEXT,
+            name TEXT,
+            category TEXT,
+            description TEXT,
+            enabled INTEGER DEFAULT 1,
+            required_role TEXT DEFAULT 'member'
+        )
+    """)
 
-/* SECTIONS */
-section{display:none;}
-section.active{display:block;}
-</style>
-</head>
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS marriages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            guild_id TEXT,
+            user1 TEXT,
+            user2 TEXT,
+            marriage_timestamp TEXT,
+            UNIQUE(guild_id, user1, user2)
+        )
+    """)
 
-<body>
-<div class="sidebar">
-    <div class="logo"><i class="fa-brands fa-discord"></i> Super Panel</div>
-    <div class="nav-item active" onclick="showSection('overview')"><i class="fa-solid fa-house"></i> Overview</div>
-    <div class="nav-item" onclick="showSection('members')"><i class="fa-solid fa-users"></i> Members</div>
-    <div class="nav-item" onclick="showSection('commands')"><i class="fa-solid fa-bolt"></i> Commands</div>
-    <div class="nav-item" onclick="showSection('settings')"><i class="fa-solid fa-gear"></i> Settings</div>
-    <div class="nav-item" onclick="showSection('stats')"><i class="fa-solid fa-chart-line"></i> Analytics</div>
-</div>
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS prison (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            guild_id TEXT,
+            user_id TEXT,
+            prison_channel_id TEXT,
+            moderator_id TEXT,
+            reason TEXT,
+            timestamp TEXT,
+            saved_roles TEXT
+        )
+    """)
 
-<div class="main">
-<div class="header">
-    <h1>Dashboard</h1>
-    <div class="user-badge"><i class="fa-solid fa-user"></i> {{ user.username }}</div>
-</div>
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS guild_settings (
+            guild_id TEXT PRIMARY KEY,
+            leveling_config TEXT DEFAULT '{"enabled": true}'
+        )
+    """)
 
-<!-- OVERVIEW -->
-<section id="overview" class="active">
-<div class="stats">
-    <div class="card">
-        <div class="card-title">Total Balance</div>
-        <div class="card-value">{{ total_balance }}</div>
-    </div>
-    <div class="card">
-        <div class="card-title">Users in Prison</div>
-        <div class="card-value">{{ prison_count }}</div>
-    </div>
-    <div class="card">
-        <div class="card-title">Marriages</div>
-        <div class="card-value">{{ marriages_count }}</div>
-    </div>
-    <div class="card">
-        <div class="card-title">Leveling</div>
-        <div class="card-value">
-            {% if leveling.enabled %}
-                <span class="badge-enabled">Enabled</span>
-            {% else %}
-                <span class="badge-disabled">Disabled</span>
-            {% endif %}
-        </div>
-    </div>
-</div>
-</section>
+    db.commit()
+    db.close()
 
-<!-- MEMBERS -->
-<section id="members">
-<div class="table-container">
-<div class="search">
-    <input type="text" id="searchMembers" placeholder="Search members...">
-</div>
-<table id="membersTable">
-<thead>
-    <tr>
-        <th>User</th>
-        <th>Guild</th>
-        <th>XP</th>
-        <th>Level</th>
-        <th>Balance</th>
-        <th>Action</th>
-    </tr>
-</thead>
-<tbody>
-    {% for u in users %}
-    <tr>
-        <td>{{ u.username }}</td>
-        <td>{{ u.guild_id }}</td>
-        <td>{{ u.xp }}</td>
-        <td><span class="badge-level">{{ u.level }}</span></td>
-        <td><span class="badge-money">{{ u.balance }}</span></td>
-        <td>
-            <form action="{{ url_for('update_balance') }}" method="POST">
-                <input type="hidden" name="user_id" value="{{ u.user_id }}">
-                <input type="number" name="balance" value="{{ u.balance }}" style="width:80px;">
-                <button class="action-btn">Update</button>
-            </form>
-        </td>
-    </tr>
-    {% endfor %}
-</tbody>
-</table>
-</div>
-</section>
+# ==============================
+# LOGIN / OAUTH2
+# ==============================
+@app.route("/login")
+def login():
+    return redirect(
+        f"{DISCORD_AUTH_URL}?client_id={CLIENT_ID}"
+        f"&redirect_uri={REDIRECT_URI}"
+        f"&response_type=code&scope=identify%20guilds"
+    )
 
-<!-- COMMANDS -->
-<section id="commands">
-<div class="table-container">
-<div class="search">
-    <input type="text" id="searchCommands" placeholder="Search commands...">
-</div>
-<table id="commandsTable">
-<thead>
-    <tr>
-        <th>Name</th>
-        <th>Category</th>
-        <th>Description</th>
-        <th>Status</th>
-    </tr>
-</thead>
-<tbody>
-    {% for cmd in commands %}
-    <tr>
-        <td>{{ cmd.name }}</td>
-        <td><span class="badge-category">{{ cmd.category }}</span></td>
-        <td>{{ cmd.description }}</td>
-        <td>{% if cmd.enabled %}✅{% else %}❌{% endif %}</td>
-    </tr>
-    {% endfor %}
-</tbody>
-</table>
-</div>
-</section>
+@app.route("/callback")
+def callback():
+    code = request.args.get("code")
+    if not code:
+        return "Erreur OAuth : code manquant"
 
-<section id="settings"><h2>Settings Panel</h2></section>
-<section id="stats"><h2>Advanced Analytics</h2></section>
+    data = {
+        "client_id": CLIENT_ID,
+        "client_secret": CLIENT_SECRET,
+        "grant_type": "authorization_code",
+        "code": code,
+        "redirect_uri": REDIRECT_URI,
+        "scope": "identify guilds"
+    }
 
-</div>
+    headers = {"Content-Type": "application/x-www-form-urlencoded"}
+    token_resp = requests.post(DISCORD_TOKEN_URL, data=data, headers=headers)
+    token_json = token_resp.json()
 
-<script>
-function showSection(id){
-    document.querySelectorAll('section').forEach(s=>s.classList.remove('active'));
-    document.getElementById(id).classList.add('active');
-    document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
-    event.target.classList.add('active');
-}
+    if "access_token" not in token_json:
+        return "Erreur OAuth : token invalide"
 
-// Search members
-document.getElementById("searchMembers").addEventListener("keyup", function() {
-    let filter = this.value.toLowerCase();
-    document.querySelectorAll("#membersTable tbody tr").forEach(row => {
-        row.style.display = row.innerText.toLowerCase().includes(filter) ? "" : "none";
-    });
-});
+    access_token = token_json["access_token"]
 
-// Search commands
-document.getElementById("searchCommands").addEventListener("keyup", function() {
-    let filter = this.value.toLowerCase();
-    document.querySelectorAll("#commandsTable tbody tr").forEach(row => {
-        row.style.display = row.innerText.toLowerCase().includes(filter) ? "" : "none";
-    });
-});
-</script>
-</body>
-</html>
+    # Récupération user + guilds
+    user = requests.get(DISCORD_API_URL, headers={"Authorization": f"Bearer {access_token}"}).json()
+    guilds = requests.get(DISCORD_GUILDS_URL, headers={"Authorization": f"Bearer {access_token}"}).json()
+
+    session["user"] = user
+    session["guilds"] = guilds
+    session["token"] = access_token
+
+    return redirect("/")
+
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect("/login")
+
+# ==============================
+# DASHBOARD
+# ==============================
+@app.route("/")
+def dashboard():
+    if "user" not in session:
+        return redirect("/login")
+
+    db = get_db()
+
+    guild_id = request.args.get("guild_id")
+    search_user = request.args.get("search_user")
+    search_cmd = request.args.get("search_cmd")
+
+    # Utilisateurs
+    if guild_id:
+        users_query = "SELECT * FROM users WHERE guild_id = ?"
+        params = [guild_id]
+        if search_user:
+            users_query += " AND (user_id LIKE ? OR LOWER(username) LIKE LOWER(?))"
+            params += [f"%{search_user}%", f"%{search_user}%"]
+        users = db.execute(users_query, params).fetchall()
+    else:
+        users = db.execute("SELECT * FROM users LIMIT 50").fetchall()
+
+    # Commandes
+    cmd_query = "SELECT * FROM commands"
+    cmd_params = []
+    if guild_id:
+        cmd_query += " WHERE guild_id = ?"
+        cmd_params.append(guild_id)
+        if search_cmd:
+            cmd_query += " AND (name LIKE ? OR category LIKE ? OR description LIKE ?)"
+            cmd_params += [f"%{search_cmd}%"]*3
+    else:
+        if search_cmd:
+            cmd_query += " WHERE name LIKE ? OR category LIKE ? OR description LIKE ?"
+            cmd_params += [f"%{search_cmd}%"]*3
+
+    commands = db.execute(cmd_query, cmd_params).fetchall()
+
+    # Stats
+    total_balance = db.execute("SELECT SUM(balance) FROM users").fetchone()[0] or 0
+    prison_count = db.execute("SELECT COUNT(*) FROM prison").fetchone()[0]
+    marriages_count = db.execute("SELECT COUNT(*) FROM marriages").fetchone()[0]
+
+    # Leveling config
+    leveling_row = db.execute("SELECT leveling_config FROM guild_settings LIMIT 1").fetchone()
+    leveling = json.loads(leveling_row["leveling_config"]) if leveling_row else {"enabled": False}
+
+    db.close()
+
+    return render_template(
+        "dashboard.html",
+        users=users,
+        commands=commands,
+        total_balance=total_balance,
+        prison_count=prison_count,
+        marriages_count=marriages_count,
+        leveling=leveling,
+        user=session["user"],
+        guilds=session.get("guilds", []),
+        selected_guild=guild_id
+    )
+
+# ==============================
+# UPDATE BALANCE
+# ==============================
+@app.route("/update_balance", methods=["POST"])
+def update_balance():
+    user_id = request.form.get("user_id")
+    balance = request.form.get("balance")
+
+    try:
+        balance = int(balance)
+    except:
+        return redirect(url_for("dashboard"))
+
+    db = get_db()
+    db.execute("UPDATE users SET balance = ? WHERE user_id = ?", (balance, user_id))
+    db.commit()
+    db.close()
+
+    return redirect(url_for("dashboard"))
+
+# ==============================
+# TOGGLE COMMAND
+# ==============================
+@app.route("/toggle_command", methods=["POST"])
+def toggle_command():
+    command_id = request.form.get("command_id")
+
+    db = get_db()
+    cmd = db.execute("SELECT enabled FROM commands WHERE id = ?", (command_id,)).fetchone()
+    if cmd:
+        new_val = 0 if cmd["enabled"] else 1
+        db.execute("UPDATE commands SET enabled = ? WHERE id = ?", (new_val, command_id))
+        db.commit()
+    db.close()
+    return redirect(url_for("dashboard"))
+
+# ==============================
+# INIT & RUN
+# ==============================
+init_db()
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port, debug=True)

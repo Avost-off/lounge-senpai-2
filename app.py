@@ -1,7 +1,8 @@
 import os
 import sqlite3
 import requests
-from flask import Flask, render_template, redirect, request, session, url_for
+import json
+from flask import Flask, render_template, redirect, request, session, flash, url_for
 
 # ==============================
 # APP FLASK
@@ -9,7 +10,6 @@ from flask import Flask, render_template, redirect, request, session, url_for
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 app = Flask(__name__, template_folder=os.path.join(BASE_DIR, "templates"))
 app.secret_key = os.environ.get("SESSION_SECRET", "CHANGE_THIS_SECRET_KEY")
-
 DATABASE = os.path.join(BASE_DIR, "main_database.db")
 
 # ==============================
@@ -28,28 +28,17 @@ DISCORD_API_URL = "https://discord.com/api/users/@me"
 DISCORD_GUILDS_URL = "https://discord.com/api/users/@me/guilds"
 
 # ==============================
-# DATABASE
+# DATABASE UTIL
 # ==============================
 def get_db():
     conn = sqlite3.connect(DATABASE, timeout=10)
     conn.row_factory = sqlite3.Row
     return conn
 
-
 def init_db():
     db = get_db()
 
-    # TABLE GUILDS
-    db.execute("""
-        CREATE TABLE IF NOT EXISTS guilds (
-            guild_id TEXT PRIMARY KEY,
-            name TEXT,
-            owner_id TEXT,
-            created_at TEXT
-        )
-    """)
-
-    # TABLE USERS
+    # USERS multi-serveurs
     db.execute("""
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -64,7 +53,7 @@ def init_db():
         )
     """)
 
-    # TABLE COMMANDS
+    # COMMANDS
     db.execute("""
         CREATE TABLE IF NOT EXISTS commands (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -77,7 +66,7 @@ def init_db():
         )
     """)
 
-    # TABLE MARRIAGES
+    # MARRIAGES
     db.execute("""
         CREATE TABLE IF NOT EXISTS marriages (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -89,29 +78,47 @@ def init_db():
         )
     """)
 
+    # PRISON
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS prison (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            guild_id TEXT,
+            user_id TEXT,
+            prison_channel_id TEXT,
+            moderator_id TEXT,
+            reason TEXT,
+            timestamp TEXT,
+            saved_roles TEXT
+        )
+    """)
+
+    # GUILD SETTINGS
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS guild_settings (
+            guild_id TEXT PRIMARY KEY,
+            leveling_config TEXT DEFAULT '{"enabled": true}'
+        )
+    """)
+
     db.commit()
     db.close()
 
-
 # ==============================
-# LOGIN
+# LOGIN / OAUTH2
 # ==============================
 @app.route("/login")
 def login():
     return redirect(
-        f"{DISCORD_AUTH_URL}"
-        f"?client_id={CLIENT_ID}"
+        f"{DISCORD_AUTH_URL}?client_id={CLIENT_ID}"
         f"&redirect_uri={REDIRECT_URI}"
-        f"&response_type=code"
-        f"&scope=identify%20guilds"
+        f"&response_type=code&scope=identify%20guilds"
     )
-
 
 @app.route("/callback")
 def callback():
     code = request.args.get("code")
     if not code:
-        return redirect("/login")
+        return "Erreur OAuth : code manquant"
 
     data = {
         "client_id": CLIENT_ID,
@@ -120,26 +127,17 @@ def callback():
         "code": code,
         "redirect_uri": REDIRECT_URI,
     }
-
     headers = {"Content-Type": "application/x-www-form-urlencoded"}
-
-    token_response = requests.post(DISCORD_TOKEN_URL, data=data, headers=headers)
-    token_json = token_response.json()
-
+    token_resp = requests.post(DISCORD_TOKEN_URL, data=data, headers=headers)
+    token_json = token_resp.json()
     if "access_token" not in token_json:
-        return redirect("/login")
+        return "Erreur OAuth : token invalide"
 
     access_token = token_json["access_token"]
 
-    user = requests.get(
-        DISCORD_API_URL,
-        headers={"Authorization": f"Bearer {access_token}"}
-    ).json()
-
-    guilds = requests.get(
-        DISCORD_GUILDS_URL,
-        headers={"Authorization": f"Bearer {access_token}"}
-    ).json()
+    # User + Guilds
+    user = requests.get(DISCORD_API_URL, headers={"Authorization": f"Bearer {access_token}"}).json()
+    guilds = requests.get(DISCORD_GUILDS_URL, headers={"Authorization": f"Bearer {access_token}"}).json()
 
     session["user"] = user
     session["guilds"] = guilds
@@ -147,12 +145,10 @@ def callback():
 
     return redirect("/")
 
-
 @app.route("/logout")
 def logout():
     session.clear()
     return redirect("/login")
-
 
 # ==============================
 # DASHBOARD
@@ -162,46 +158,57 @@ def dashboard():
     if "user" not in session:
         return redirect("/login")
 
-    guild_id = request.args.get("guild_id")
-
     db = get_db()
+    guild_id = request.args.get("guild_id")
+    search_user = request.args.get("search_user")
+    search_cmd = request.args.get("search_cmd")
 
+    # USERS
+    users_query = "SELECT * FROM users"
+    users_params = []
     if guild_id:
-        users = db.execute(
-            "SELECT * FROM users WHERE guild_id = ?",
-            (guild_id,)
-        ).fetchall()
-
-        commands = db.execute(
-            "SELECT * FROM commands WHERE guild_id = ?",
-            (guild_id,)
-        ).fetchall()
-
-        total_balance = db.execute(
-            "SELECT SUM(balance) FROM users WHERE guild_id = ?",
-            (guild_id,)
-        ).fetchone()[0] or 0
-
-        marriages_count = db.execute(
-            "SELECT COUNT(*) FROM marriages WHERE guild_id = ?",
-            (guild_id,)
-        ).fetchone()[0]
+        users_query += " WHERE guild_id = ?"
+        users_params.append(guild_id)
+        if search_user:
+            users_query += " AND (user_id LIKE ? OR LOWER(username) LIKE LOWER(?))"
+            users_params += [f"%{search_user}%", f"%{search_user}%"]
     else:
-        users = db.execute("SELECT * FROM users LIMIT 50").fetchall()
-        commands = db.execute("SELECT * FROM commands").fetchall()
-        total_balance = db.execute(
-            "SELECT SUM(balance) FROM users"
-        ).fetchone()[0] or 0
-        marriages_count = db.execute(
-            "SELECT COUNT(*) FROM marriages"
-        ).fetchone()[0]
+        if search_user:
+            users_query += " WHERE user_id LIKE ? OR LOWER(username) LIKE LOWER(?)"
+            users_params += [f"%{search_user}%", f"%{search_user}%"]
+        else:
+            users_query += " LIMIT 50"
 
-    prison_count = db.execute(
-        "SELECT COUNT(*) FROM users WHERE in_prison = 1"
-    ).fetchone()[0]
+    users = db.execute(users_query, users_params).fetchall()
+
+    # COMMANDS
+    commands_query = "SELECT * FROM commands"
+    commands_params = []
+    if guild_id:
+        commands_query += " WHERE guild_id = ?"
+        commands_params.append(guild_id)
+        if search_cmd:
+            commands_query += " AND (name LIKE ? OR category LIKE ? OR description LIKE ?)"
+            commands_params += [f"%{search_cmd}%"]*3
+    else:
+        if search_cmd:
+            commands_query += " WHERE name LIKE ? OR category LIKE ? OR description LIKE ?"
+            commands_params += [f"%{search_cmd}%"]*3
+        else:
+            commands_query += " LIMIT 50"
+
+    commands = db.execute(commands_query, commands_params).fetchall()
+
+    # STATS
+    total_balance = db.execute("SELECT SUM(balance) FROM users").fetchone()[0] or 0
+    prison_count = db.execute("SELECT COUNT(*) FROM prison").fetchone()[0]
+    marriages_count = db.execute("SELECT COUNT(*) FROM marriages").fetchone()[0]
+
+    # LEVELING
+    leveling_row = db.execute("SELECT leveling_config FROM guild_settings LIMIT 1").fetchone()
+    leveling = json.loads(leveling_row["leveling_config"]) if leveling_row else {"enabled": False}
 
     db.close()
-
     return render_template(
         "dashboard.html",
         users=users,
@@ -209,10 +216,11 @@ def dashboard():
         total_balance=total_balance,
         prison_count=prison_count,
         marriages_count=marriages_count,
+        leveling=leveling,
         user=session["user"],
-        guilds=session.get("guilds", [])
+        guilds=session.get("guilds", []),
+        selected_guild=guild_id
     )
-
 
 # ==============================
 # UPDATE BALANCE
@@ -220,24 +228,17 @@ def dashboard():
 @app.route("/update_balance", methods=["POST"])
 def update_balance():
     user_id = request.form.get("user_id")
-    guild_id = request.form.get("guild_id")
     balance = request.form.get("balance")
-
     try:
         balance = int(balance)
     except:
-        return redirect(url_for("dashboard", guild_id=guild_id))
+        return redirect(url_for("dashboard"))
 
     db = get_db()
-    db.execute(
-        "UPDATE users SET balance = ? WHERE user_id = ? AND guild_id = ?",
-        (balance, user_id, guild_id)
-    )
+    db.execute("UPDATE users SET balance = ? WHERE user_id = ?", (balance, user_id))
     db.commit()
     db.close()
-
-    return redirect(url_for("dashboard", guild_id=guild_id))
-
+    return redirect(url_for("dashboard"))
 
 # ==============================
 # TOGGLE COMMAND
@@ -245,31 +246,19 @@ def update_balance():
 @app.route("/toggle_command", methods=["POST"])
 def toggle_command():
     command_id = request.form.get("command_id")
-    guild_id = request.form.get("guild_id")
-
     db = get_db()
-    cmd = db.execute(
-        "SELECT enabled FROM commands WHERE id = ?",
-        (command_id,)
-    ).fetchone()
-
+    cmd = db.execute("SELECT enabled FROM commands WHERE id = ?", (command_id,)).fetchone()
     if cmd:
-        new_value = 0 if cmd["enabled"] == 1 else 1
-        db.execute(
-            "UPDATE commands SET enabled = ? WHERE id = ?",
-            (new_value, command_id)
-        )
+        new_val = 0 if cmd["enabled"] else 1
+        db.execute("UPDATE commands SET enabled = ? WHERE id = ?", (new_val, command_id))
         db.commit()
-
     db.close()
-    return redirect(url_for("dashboard", guild_id=guild_id))
-
+    return redirect(url_for("dashboard"))
 
 # ==============================
-# START
+# INIT & RUN
 # ==============================
 init_db()
-
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
+    app.run(host="0.0.0.0", port=port, debug=True)

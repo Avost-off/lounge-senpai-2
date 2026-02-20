@@ -9,7 +9,15 @@ from flask import Flask, render_template, redirect, request, session, flash, url
 # ==============================
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 app = Flask(__name__, template_folder=os.path.join(BASE_DIR, "templates"))
+
+# Session secret obligatoire et sécurisé
 app.secret_key = os.environ.get("SESSION_SECRET", "CHANGE_THIS_SECRET_KEY")
+app.config.update(
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE='Lax',
+    SESSION_PERMANENT=False
+)
+
 DATABASE = os.path.join(BASE_DIR, "main_database.db")
 
 # ==============================
@@ -28,7 +36,7 @@ DISCORD_API_URL = "https://discord.com/api/users/@me"
 DISCORD_GUILDS_URL = "https://discord.com/api/users/@me/guilds"
 
 # ==============================
-# DATABASE
+# DATABASE UTIL
 # ==============================
 def get_db():
     conn = sqlite3.connect(DATABASE, timeout=10)
@@ -37,7 +45,8 @@ def get_db():
 
 def init_db():
     db = get_db()
-    # Users multi-serveur
+
+    # USERS
     db.execute("""
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -51,7 +60,8 @@ def init_db():
             UNIQUE(guild_id, user_id)
         )
     """)
-    # Commands
+
+    # COMMANDS
     db.execute("""
         CREATE TABLE IF NOT EXISTS commands (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -63,7 +73,8 @@ def init_db():
             required_role TEXT DEFAULT 'member'
         )
     """)
-    # Marriages
+
+    # MARRIAGES
     db.execute("""
         CREATE TABLE IF NOT EXISTS marriages (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -74,22 +85,38 @@ def init_db():
             UNIQUE(guild_id, user1, user2)
         )
     """)
-    # Guild settings
+
+    # PRISON
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS prison (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            guild_id TEXT,
+            user_id TEXT,
+            prison_channel_id TEXT,
+            moderator_id TEXT,
+            reason TEXT,
+            timestamp TEXT,
+            saved_roles TEXT
+        )
+    """)
+
+    # GUILD SETTINGS
     db.execute("""
         CREATE TABLE IF NOT EXISTS guild_settings (
             guild_id TEXT PRIMARY KEY,
             leveling_config TEXT DEFAULT '{"enabled": true}'
         )
     """)
+
     db.commit()
     db.close()
+
 
 # ==============================
 # LOGIN / OAUTH2
 # ==============================
 @app.route("/login")
 def login():
-    # Redirection Discord OAuth2
     return redirect(
         f"{DISCORD_AUTH_URL}?client_id={CLIENT_ID}"
         f"&redirect_uri={REDIRECT_URI}"
@@ -103,50 +130,40 @@ def callback():
         flash("Erreur OAuth : code manquant", "danger")
         return redirect("/login")
 
-    # Récupération du token
     data = {
         "client_id": CLIENT_ID,
         "client_secret": CLIENT_SECRET,
         "grant_type": "authorization_code",
         "code": code,
         "redirect_uri": REDIRECT_URI,
-        "scope": "identify guilds"
     }
     headers = {"Content-Type": "application/x-www-form-urlencoded"}
+
     token_resp = requests.post(DISCORD_TOKEN_URL, data=data, headers=headers)
     token_json = token_resp.json()
-    
     if "access_token" not in token_json:
         flash("Erreur OAuth : token invalide", "danger")
         return redirect("/login")
 
     access_token = token_json["access_token"]
 
-    # Récupération info utilisateur
-    user = requests.get(
-        DISCORD_API_URL,
-        headers={"Authorization": f"Bearer {access_token}"}
-    ).json()
+    # Récupération des infos utilisateur et guilds
+    user = requests.get(DISCORD_API_URL, headers={"Authorization": f"Bearer {access_token}"}).json()
+    guilds = requests.get(DISCORD_GUILDS_URL, headers={"Authorization": f"Bearer {access_token}"}).json()
 
-    # Récupération des guildes de l'utilisateur
-    guilds = requests.get(
-        DISCORD_GUILDS_URL,
-        headers={"Authorization": f"Bearer {access_token}"}
-    ).json()
-
-    # Sauvegarde dans la session
     session["user"] = user
     session["guilds"] = guilds
     session["token"] = access_token
 
-    flash(f"Bienvenue {user['username']} !", "success")
+    print("Connexion réussie :", user["username"])
     return redirect("/")
+
 
 @app.route("/logout")
 def logout():
     session.clear()
-    flash("Vous êtes déconnecté.", "info")
     return redirect("/login")
+
 
 # ==============================
 # DASHBOARD
@@ -157,42 +174,46 @@ def dashboard():
         return redirect("/login")
 
     db = get_db()
-    selected_guild = request.args.get("guild_id")
+    guild_id = request.args.get("guild_id")
     search_user = request.args.get("search_user")
     search_cmd = request.args.get("search_cmd")
 
-    # Utilisateurs
-    users_query = "SELECT * FROM users"
-    users_params = []
-    if selected_guild:
-        users_query += " WHERE guild_id = ?"
-        users_params.append(selected_guild)
-    if search_user:
-        users_query += " AND (user_id LIKE ? OR LOWER(username) LIKE LOWER(?))" if selected_guild else " WHERE (user_id LIKE ? OR LOWER(username) LIKE LOWER(?))"
-        users_params += [f"%{search_user}%", f"%{search_user}%"]
-    users = db.execute(users_query, users_params).fetchall()
+    # USERS
+    if guild_id:
+        users_query = "SELECT * FROM users WHERE guild_id = ?"
+        params = [guild_id]
+        if search_user:
+            users_query += " AND (user_id LIKE ? OR LOWER(username) LIKE LOWER(?))"
+            params += [f"%{search_user}%", f"%{search_user}%"]
+        users = db.execute(users_query, params).fetchall()
+    else:
+        users = db.execute("SELECT * FROM users LIMIT 50").fetchall()
 
-    # Commandes
-    commands_query = "SELECT * FROM commands"
-    commands_params = []
-    if selected_guild:
-        commands_query += " WHERE guild_id = ?"
-        commands_params.append(selected_guild)
-    if search_cmd:
-        commands_query += " AND (name LIKE ? OR category LIKE ? OR description LIKE ?)" if selected_guild else " WHERE (name LIKE ? OR category LIKE ? OR description LIKE ?)"
-        commands_params += [f"%{search_cmd}%"]*3
-    commands = db.execute(commands_query, commands_params).fetchall()
+    # COMMANDS
+    cmd_query = "SELECT * FROM commands"
+    cmd_params = []
+    if guild_id:
+        cmd_query += " WHERE guild_id = ?"
+        cmd_params.append(guild_id)
+        if search_cmd:
+            cmd_query += " AND (name LIKE ? OR category LIKE ? OR description LIKE ?)"
+            cmd_params += [f"%{search_cmd}%"]*3
+    else:
+        if search_cmd:
+            cmd_query += " WHERE name LIKE ? OR category LIKE ? OR description LIKE ?"
+            cmd_params += [f"%{search_cmd}%"]*3
+
+    commands = db.execute(cmd_query, cmd_params).fetchall()
 
     # Stats
     total_balance = db.execute("SELECT SUM(balance) FROM users").fetchone()[0] or 0
-    prison_count = db.execute("SELECT COUNT(*) FROM users WHERE in_prison = 1").fetchone()[0]
+    prison_count = db.execute("SELECT COUNT(*) FROM prison").fetchone()[0]
     marriages_count = db.execute("SELECT COUNT(*) FROM marriages").fetchone()[0]
-
-    # Leveling config (multi-serveur)
-    leveling_row = db.execute("SELECT leveling_config FROM guild_settings WHERE guild_id = ? LIMIT 1", (selected_guild,)).fetchone() if selected_guild else None
+    leveling_row = db.execute("SELECT leveling_config FROM guild_settings LIMIT 1").fetchone()
     leveling = json.loads(leveling_row["leveling_config"]) if leveling_row else {"enabled": False}
 
     db.close()
+
     return render_template(
         "dashboard.html",
         users=users,
@@ -203,8 +224,9 @@ def dashboard():
         leveling=leveling,
         user=session["user"],
         guilds=session.get("guilds", []),
-        selected_guild=selected_guild
+        selected_guild=guild_id
     )
+
 
 # ==============================
 # UPDATE BALANCE
@@ -222,7 +244,9 @@ def update_balance():
     db.execute("UPDATE users SET balance = ? WHERE user_id = ?", (balance, user_id))
     db.commit()
     db.close()
+
     return redirect(url_for("dashboard"))
+
 
 # ==============================
 # TOGGLE COMMAND
@@ -239,8 +263,9 @@ def toggle_command():
     db.close()
     return redirect(url_for("dashboard"))
 
+
 # ==============================
-# INIT & RUN
+# INIT DB & RUN
 # ==============================
 init_db()
 if __name__ == "__main__":

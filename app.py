@@ -1,8 +1,7 @@
 import os
 import sqlite3
 import requests
-import json
-from flask import Flask, render_template, redirect, request, session, flash, url_for
+from flask import Flask, render_template, redirect, request, session, url_for
 
 # ==============================
 # APP FLASK
@@ -39,13 +38,8 @@ def get_db():
 
 def init_db():
     db = get_db()
-    if not db:
-        print("Erreur DB")
-        return
 
-    # ===============================
     # TABLE GUILDS
-    # ===============================
     db.execute("""
         CREATE TABLE IF NOT EXISTS guilds (
             guild_id TEXT PRIMARY KEY,
@@ -55,9 +49,7 @@ def init_db():
         )
     """)
 
-    # ===============================
-    # TABLE USERS (multi-serveur)
-    # ===============================
+    # TABLE USERS
     db.execute("""
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -72,9 +64,7 @@ def init_db():
         )
     """)
 
-    # ===============================
     # TABLE COMMANDS
-    # ===============================
     db.execute("""
         CREATE TABLE IF NOT EXISTS commands (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -87,9 +77,7 @@ def init_db():
         )
     """)
 
-    # ===============================
     # TABLE MARRIAGES
-    # ===============================
     db.execute("""
         CREATE TABLE IF NOT EXISTS marriages (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -180,24 +168,36 @@ def dashboard():
 
     if guild_id:
         users = db.execute(
-            "SELECT * FROM user_stats WHERE guild_id = ?",
+            "SELECT * FROM users WHERE guild_id = ?",
             (guild_id,)
         ).fetchall()
+
+        commands = db.execute(
+            "SELECT * FROM commands WHERE guild_id = ?",
+            (guild_id,)
+        ).fetchall()
+
+        total_balance = db.execute(
+            "SELECT SUM(balance) FROM users WHERE guild_id = ?",
+            (guild_id,)
+        ).fetchone()[0] or 0
+
+        marriages_count = db.execute(
+            "SELECT COUNT(*) FROM marriages WHERE guild_id = ?",
+            (guild_id,)
+        ).fetchone()[0]
     else:
-        users = db.execute("SELECT * FROM user_stats LIMIT 50").fetchall()
-
-    commands = db.execute("SELECT * FROM commands").fetchall()
-
-    total_balance = db.execute(
-        "SELECT SUM(balance) FROM user_stats"
-    ).fetchone()[0] or 0
+        users = db.execute("SELECT * FROM users LIMIT 50").fetchall()
+        commands = db.execute("SELECT * FROM commands").fetchall()
+        total_balance = db.execute(
+            "SELECT SUM(balance) FROM users"
+        ).fetchone()[0] or 0
+        marriages_count = db.execute(
+            "SELECT COUNT(*) FROM marriages"
+        ).fetchone()[0]
 
     prison_count = db.execute(
-        "SELECT COUNT(*) FROM prison"
-    ).fetchone()[0]
-
-    marriages_count = db.execute(
-        "SELECT COUNT(*) FROM marriages"
+        "SELECT COUNT(*) FROM users WHERE in_prison = 1"
     ).fetchone()[0]
 
     db.close()
@@ -220,25 +220,23 @@ def dashboard():
 @app.route("/update_balance", methods=["POST"])
 def update_balance():
     user_id = request.form.get("user_id")
+    guild_id = request.form.get("guild_id")
     balance = request.form.get("balance")
-
-    if not user_id:
-        return redirect(url_for("dashboard"))
 
     try:
         balance = int(balance)
     except:
-        return redirect(url_for("dashboard"))
+        return redirect(url_for("dashboard", guild_id=guild_id))
 
     db = get_db()
     db.execute(
-        "UPDATE user_stats SET balance = ? WHERE user_id = ?",
-        (balance, user_id)
+        "UPDATE users SET balance = ? WHERE user_id = ? AND guild_id = ?",
+        (balance, user_id, guild_id)
     )
     db.commit()
     db.close()
 
-    return redirect(url_for("dashboard"))
+    return redirect(url_for("dashboard", guild_id=guild_id))
 
 
 # ==============================
@@ -247,6 +245,7 @@ def update_balance():
 @app.route("/toggle_command", methods=["POST"])
 def toggle_command():
     command_id = request.form.get("command_id")
+    guild_id = request.form.get("guild_id")
 
     db = get_db()
     cmd = db.execute(
@@ -263,7 +262,7 @@ def toggle_command():
         db.commit()
 
     db.close()
-    return redirect(url_for("dashboard"))
+    return redirect(url_for("dashboard", guild_id=guild_id))
 
 
 # ==============================

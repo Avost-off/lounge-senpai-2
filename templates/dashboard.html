@@ -1,239 +1,166 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-<meta charset="UTF-8">
-<title>Super Dashboard</title>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-
-<style>
-:root{
-    --bg:#18191c;
-    --sidebar:#202225;
-    --card:#242526;
-    --hover:#3a3d42;
-    --accent:#5865F2;
-    --green:#3ba55d;
-    --red:#ed4245;
-    --yellow:#f1c40f;
-    --text:#f2f3f5;
-    --muted:#b0b3b8;
-    --shadow:rgba(0,0,0,0.5);
-    --transition:0.3s;
-}
-
-*{box-sizing:border-box;margin:0;padding:0;font-family:'Inter',sans-serif;}
-body{background:var(--bg);color:var(--text);display:flex;height:100vh;}
-
-/* SIDEBAR */
-.sidebar{
-    width:300px;
-    background:var(--sidebar);
-    padding:25px 15px;
-    display:flex;
-    flex-direction:column;
-    transition:var(--transition);
-    box-shadow:2px 0 15px var(--shadow);
-}
-.logo{font-size:28px;font-weight:700;margin-bottom:40px;color:var(--accent);text-align:center;}
-.nav-item{
-    padding:14px 20px;
-    border-radius:12px;
-    margin-bottom:12px;
-    cursor:pointer;
-    display:flex;
-    align-items:center;
-    gap:12px;
-    font-weight:500;
-    color:var(--text);
-    transition:var(--transition);
-}
-.nav-item:hover{background:var(--hover);}
-.nav-item.active{background:var(--accent);color:white;box-shadow:0 4px 12px var(--shadow);transform:translateX(2px);}
-
-/* MAIN */
-.main{flex:1;padding:30px 40px;overflow:auto;}
-
-/* HEADER */
-.header{display:flex;justify-content:space-between;align-items:center;margin-bottom:30px;}
-.header h1{font-size:30px;font-weight:700;}
-.user-badge{background:var(--card);padding:8px 20px;border-radius:25px;font-size:14px;color:var(--muted);font-weight:500;}
-
-/* STATS CARDS */
-.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:25px;margin-bottom:35px;}
-.card{background:var(--card);padding:25px;border-radius:15px;transition:var(--transition);box-shadow:0 6px 20px var(--shadow);}
-.card:hover{transform:translateY(-8px);box-shadow:0 15px 30px var(--shadow);}
-.card-title{font-size:14px;color:var(--muted);margin-bottom:12px;text-transform:uppercase;letter-spacing:0.5px;}
-.card-value{font-size:30px;font-weight:700;}
-
-/* TABLES */
-.table-container{background:var(--card);border-radius:15px;padding:20px;box-shadow:0 6px 20px var(--shadow);}
-table{width:100%;border-collapse:collapse;}
-th{text-align:left;font-size:13px;color:var(--muted);padding-bottom:15px;}
-td{padding:15px 0;border-top:1px solid #3f4147;font-size:14px;}
-tr:hover{background:var(--hover);transition:0.2s;}
-.badge{padding:6px 12px;border-radius:25px;font-size:12px;font-weight:600;}
-.badge-level{background:var(--accent);color:white;}
-.badge-money{background:var(--green);color:white;}
-.badge-enabled{background:var(--green);color:white;}
-.badge-disabled{background:var(--red);color:white;}
-.badge-category{padding:4px 10px;border-radius:12px;background:var(--yellow);color:black;font-size:12px;font-weight:600;}
-
-/* ACTION BUTTONS */
-.action-btn{background:var(--accent);border:none;padding:6px 14px;border-radius:8px;cursor:pointer;color:white;transition:var(--transition);font-weight:500;}
-.action-btn:hover{background:#4752c4;}
-
-/* SEARCH */
-.search{margin-bottom:20px;}
-.search input{width:100%;padding:12px 18px;border-radius:15px;border:none;background:#2c2f33;color:white;outline:none;transition:var(--transition);}
-.search input:focus{background:#3a3d42;}
-
-/* SECTIONS */
-section{display:none;}
-section.active{display:block;}
-</style>
+    <meta charset="UTF-8">
+    <title>Dashboard Bot</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body.dark-mode {
+            background-color: #1f1f2e;
+            color: #f0f0f0;
+        }
+        .table-dark-mode {
+            background-color: #2b2b3a;
+            color: #f0f0f0;
+        }
+        .toggle-btn {
+            cursor: pointer;
+        }
+        .container {
+            margin-top: 30px;
+        }
+    </style>
 </head>
-
 <body>
-<div class="sidebar">
-    <div class="logo"><i class="fa-brands fa-discord"></i> Super Panel</div>
-    <div class="nav-item active" onclick="showSection('overview')"><i class="fa-solid fa-house"></i> Overview</div>
-    <div class="nav-item" onclick="showSection('members')"><i class="fa-solid fa-users"></i> Members</div>
-    <div class="nav-item" onclick="showSection('commands')"><i class="fa-solid fa-bolt"></i> Commands</div>
-    <div class="nav-item" onclick="showSection('settings')"><i class="fa-solid fa-gear"></i> Settings</div>
-    <div class="nav-item" onclick="showSection('stats')"><i class="fa-solid fa-chart-line"></i> Analytics</div>
-</div>
-
-<div class="main">
-<div class="header">
-    <h1>Dashboard</h1>
-    <div class="user-badge"><i class="fa-solid fa-user"></i> {{ user.username }}</div>
-</div>
-
-<!-- OVERVIEW -->
-<section id="overview" class="active">
-<div class="stats">
-    <div class="card">
-        <div class="card-title">Total Balance</div>
-        <div class="card-value">{{ total_balance }}</div>
-    </div>
-    <div class="card">
-        <div class="card-title">Users in Prison</div>
-        <div class="card-value">{{ prison_count }}</div>
-    </div>
-    <div class="card">
-        <div class="card-title">Marriages</div>
-        <div class="card-value">{{ marriages_count }}</div>
-    </div>
-    <div class="card">
-        <div class="card-title">Leveling</div>
-        <div class="card-value">
-            {% if leveling.enabled %}
-                <span class="badge-enabled">Enabled</span>
-            {% else %}
-                <span class="badge-disabled">Disabled</span>
-            {% endif %}
+<div class="container">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>Dashboard Bot</h2>
+        <div>
+            <button id="modeToggle" class="btn btn-secondary">Mode Sombre</button>
+            <a href="/logout" class="btn btn-danger">Déconnexion</a>
         </div>
     </div>
-</div>
-</section>
 
-<!-- MEMBERS -->
-<section id="members">
-<div class="table-container">
-<div class="search">
-    <input type="text" id="searchMembers" placeholder="Search members...">
-</div>
-<table id="membersTable">
-<thead>
-    <tr>
-        <th>User</th>
-        <th>Guild</th>
-        <th>XP</th>
-        <th>Level</th>
-        <th>Balance</th>
-        <th>Action</th>
-    </tr>
-</thead>
-<tbody>
-    {% for u in users %}
-    <tr>
-        <td>{{ u.username }}</td>
-        <td>{{ u.guild_id }}</td>
-        <td>{{ u.xp }}</td>
-        <td><span class="badge-level">{{ u.level }}</span></td>
-        <td><span class="badge-money">{{ u.balance }}</span></td>
-        <td>
-            <form action="{{ url_for('update_balance') }}" method="POST">
-                <input type="hidden" name="user_id" value="{{ u.user_id }}">
-                <input type="number" name="balance" value="{{ u.balance }}" style="width:80px;">
-                <button class="action-btn">Update</button>
-            </form>
-        </td>
-    </tr>
-    {% endfor %}
-</tbody>
-</table>
-</div>
-</section>
+    <!-- Sélection du serveur -->
+    <form method="get" class="mb-3">
+        <div class="row g-2 align-items-center">
+            <div class="col-auto">
+                <label for="guildSelect" class="col-form-label">Serveur:</label>
+            </div>
+            <div class="col-auto">
+                <select name="guild_id" id="guildSelect" class="form-select" onchange="this.form.submit()">
+                    <option value="">-- Tous les serveurs --</option>
+                    {% for guild in guilds %}
+                        <option value="{{ guild.id }}" {% if selected_guild == guild.id %}selected{% endif %}>
+                            {{ guild.name }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-auto">
+                <input type="text" name="search_user" class="form-control" placeholder="Rechercher membre" value="{{ search_user or '' }}">
+            </div>
+            <div class="col-auto">
+                <input type="text" name="search_cmd" class="form-control" placeholder="Rechercher commande" value="{{ search_cmd or '' }}">
+            </div>
+            <div class="col-auto">
+                <button class="btn btn-primary" type="submit">Filtrer</button>
+            </div>
+        </div>
+    </form>
 
-<!-- COMMANDS -->
-<section id="commands">
-<div class="table-container">
-<div class="search">
-    <input type="text" id="searchCommands" placeholder="Search commands...">
-</div>
-<table id="commandsTable">
-<thead>
-    <tr>
-        <th>Name</th>
-        <th>Category</th>
-        <th>Description</th>
-        <th>Status</th>
-    </tr>
-</thead>
-<tbody>
-    {% for cmd in commands %}
-    <tr>
-        <td>{{ cmd.name }}</td>
-        <td><span class="badge-category">{{ cmd.category }}</span></td>
-        <td>{{ cmd.description }}</td>
-        <td>{% if cmd.enabled %}✅{% else %}❌{% endif %}</td>
-    </tr>
-    {% endfor %}
-</tbody>
-</table>
-</div>
-</section>
+    <!-- Statistiques -->
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="card text-bg-info mb-3">
+                <div class="card-body">
+                    <h5 class="card-title">Solde total</h5>
+                    <p class="card-text">{{ total_balance }}</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card text-bg-warning mb-3">
+                <div class="card-body">
+                    <h5 class="card-title">En prison</h5>
+                    <p class="card-text">{{ prison_count }}</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card text-bg-success mb-3">
+                <div class="card-body">
+                    <h5 class="card-title">Mariages</h5>
+                    <p class="card-text">{{ marriages_count }}</p>
+                </div>
+            </div>
+        </div>
+    </div>
 
-<section id="settings"><h2>Settings Panel</h2></section>
-<section id="stats"><h2>Advanced Analytics</h2></section>
+    <!-- Utilisateurs -->
+    <h4>Utilisateurs</h4>
+    <table class="table table-striped table-hover {% if 'dark-mode' in body_class %}table-dark-mode{% endif %}">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Nom</th>
+                <th>XP</th>
+                <th>Niveau</th>
+                <th>Balance</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for user in users %}
+            <tr>
+                <td>{{ user.user_id }}</td>
+                <td>{{ user.username }}</td>
+                <td>{{ user.xp }}</td>
+                <td>{{ user.level }}</td>
+                <td>{{ user.balance }}</td>
+                <td>
+                    <form method="post" action="/update_balance" class="d-inline">
+                        <input type="hidden" name="user_id" value="{{ user.user_id }}">
+                        <input type="number" name="balance" class="form-control form-control-sm d-inline w-auto" placeholder="Nouveau solde">
+                        <button class="btn btn-sm btn-primary" type="submit">Modifier</button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
 
+    <!-- Commandes -->
+    <h4>Commandes</h4>
+    <table class="table table-striped table-hover {% if 'dark-mode' in body_class %}table-dark-mode{% endif %}">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Nom</th>
+                <th>Catégorie</th>
+                <th>Description</th>
+                <th>Activée</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for cmd in commands %}
+            <tr>
+                <td>{{ cmd.id }}</td>
+                <td>{{ cmd.name }}</td>
+                <td>{{ cmd.category }}</td>
+                <td>{{ cmd.description }}</td>
+                <td>{{ 'Oui' if cmd.enabled else 'Non' }}</td>
+                <td>
+                    <form method="post" action="/toggle_command">
+                        <input type="hidden" name="command_id" value="{{ cmd.id }}">
+                        <button class="btn btn-sm btn-warning toggle-btn" type="submit">
+                            {% if cmd.enabled %}Désactiver{% else %}Activer{% endif %}
+                        </button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
 </div>
 
 <script>
-function showSection(id){
-    document.querySelectorAll('section').forEach(s=>s.classList.remove('active'));
-    document.getElementById(id).classList.add('active');
-    document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
-    event.target.classList.add('active');
-}
-
-// Search members
-document.getElementById("searchMembers").addEventListener("keyup", function() {
-    let filter = this.value.toLowerCase();
-    document.querySelectorAll("#membersTable tbody tr").forEach(row => {
-        row.style.display = row.innerText.toLowerCase().includes(filter) ? "" : "none";
+    const toggleBtn = document.getElementById('modeToggle');
+    toggleBtn.addEventListener('click', () => {
+        document.body.classList.toggle('dark-mode');
+        toggleBtn.textContent = document.body.classList.contains('dark-mode') ? 'Mode Clair' : 'Mode Sombre';
     });
-});
-
-// Search commands
-document.getElementById("searchCommands").addEventListener("keyup", function() {
-    let filter = this.value.toLowerCase();
-    document.querySelectorAll("#commandsTable tbody tr").forEach(row => {
-        row.style.display = row.innerText.toLowerCase().includes(filter) ? "" : "none";
-    });
-});
 </script>
 </body>
 </html>

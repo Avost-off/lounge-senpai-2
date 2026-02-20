@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Command Manager</title>
+<style>
+body{background:#1e1f22;color:white;font-family:Inter;padding:40px;}
+h1{margin-bottom:30px;}
+
+.command-grid{
+display:grid;
+grid-template-columns:repeat(auto-fill,minmax(300px,1fr));
+gap:20px;
+}
+
+.card{
+background:#2b2d31;
+padding:20px;
+border-radius:15px;
+transition:0.2s;
+}
+
+.card:hover{
+transform:translateY(-5px);
+box-shadow:0 10px 20px rgba(0,0,0,0.4);
+}
+
+.command-name{
+font-size:18px;
+font-weight:600;
+margin-bottom:10px;
+}
+
+.category{
+font-size:12px;
+color:#9ca3af;
+margin-bottom:10px;
+}
+
+.description{
+font-size:14px;
+margin-bottom:15px;
+color:#d1d5db;
+}
+
+.status{
+margin-bottom:15px;
+}
+
+.enabled{
+color:#3ba55d;
+font-weight:600;
+}
+
+.disabled{
+color:#ed4245;
+font-weight:600;
+}
+
+button{
+background:#5865F2;
+border:none;
+padding:8px 14px;
+border-radius:8px;
+color:white;
+cursor:pointer;
+}
+
+button:hover{
+background:#4752c4;
+}
+</style>
+</head>
+
+<body>
+
+<h1>Command Manager</h1>
+
+<div class="command-grid">
+{% for cmd in commands %}
+<div class="card">
+
+<div class="command-name">{{ cmd[1] }}</div>
+<div class="category">{{ cmd[2] }}</div>
+<div class="description">{{ cmd[3] }}</div>
+
+<div class="status">
+{% if cmd[4] == 1 %}
+<span class="enabled">Enabled</span>
+{% else %}
+<span class="disabled">Disabled</span>
+{% endif %}
+</div>
+
+<form action="{{ url_for('toggle_command', cmd_id=cmd[0]) }}" method="POST">
+<button>
+{% if cmd[4] == 1 %}
+Disable
+{% else %}
+Enable
+{% endif %}
+</button>
+</form>
+
+</div>
+{% endfor %}
+</div>
+
+</body>
+</html>

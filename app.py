@@ -19,15 +19,10 @@ DATABASE = os.path.join(BASE_DIR, "main_database.db")
 CLIENT_ID = os.environ.get("CLIENT_ID")
 CLIENT_SECRET = os.environ.get("CLIENT_SECRET")
 SESSION_SECRET = os.environ.get("SESSION_SECRET")
-REDIRECT_URI = os.environ.get("REDIRECT_URI", "https://lounge-senpai-2.onrender.com/callback")
-
-print("CLIENT_ID:", CLIENT_ID)
-print("CLIENT_SECRET:", CLIENT_SECRET)
-print("SESSION_SECRET:", SESSION_SECRET)
-print("REDIRECT_URI:", REDIRECT_URI)
+REDIRECT_URI = os.environ.get("REDIRECT_URI")
 
 if not CLIENT_ID or not CLIENT_SECRET or not SESSION_SECRET:
-    raise RuntimeError("Les variables d'environnement CLIENT_ID, CLIENT_SECRET ou SESSION_SECRET ne sont pas définies !")
+    raise RuntimeError("Variables d'environnement manquantes !")
 
 DISCORD_AUTH_URL = "https://discord.com/api/oauth2/authorize"
 DISCORD_TOKEN_URL = "https://discord.com/api/oauth2/token"
@@ -37,13 +32,65 @@ DISCORD_API_URL = "https://discord.com/api/users/@me"
 # DATABASE
 # ==============================
 def get_db():
-    try:
-        conn = sqlite3.connect(DATABASE, timeout=10)
-        conn.row_factory = sqlite3.Row
-        return conn
-    except sqlite3.Error as e:
-        print("Erreur BDD:", e)
-        return None
+    conn = sqlite3.connect(DATABASE, timeout=10)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def init_db():
+    db = get_db()
+
+    # TABLE USER_STATS
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS user_stats (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id TEXT,
+            username TEXT,
+            xp INTEGER DEFAULT 0,
+            level INTEGER DEFAULT 1,
+            balance INTEGER DEFAULT 0
+        )
+    """)
+
+    # TABLE GUILD_SETTINGS
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS guild_settings (
+            guild_id INTEGER PRIMARY KEY,
+            leveling_config TEXT
+        )
+    """)
+
+    # TABLE COMMANDS
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS commands (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT,
+            category TEXT,
+            description TEXT,
+            enabled INTEGER DEFAULT 1
+        )
+    """)
+
+    # INSERT DATA SI VIDE
+    if db.execute("SELECT COUNT(*) FROM user_stats").fetchone()[0] == 0:
+        db.execute("INSERT INTO user_stats (user_id, username, xp, level, balance) VALUES (?,?,?,?,?)",
+                   ("1111", "UserOne", 150, 2, 500))
+        db.execute("INSERT INTO user_stats (user_id, username, xp, level, balance) VALUES (?,?,?,?,?)",
+                   ("2222", "UserTwo", 450, 5, 2000))
+
+    if db.execute("SELECT COUNT(*) FROM commands").fetchone()[0] == 0:
+        db.execute("INSERT INTO commands (name, category, description) VALUES (?,?,?)",
+                   ("ban", "moderation", "Ban a user"))
+        db.execute("INSERT INTO commands (name, category, description) VALUES (?,?,?)",
+                   ("kick", "moderation", "Kick a user"))
+        db.execute("INSERT INTO commands (name, category, description) VALUES (?,?,?)",
+                   ("daily", "economy", "Claim daily reward"))
+
+    db.commit()
+    db.close()
+
+
+init_db()
 
 # ==============================
 # LOGIN
@@ -56,11 +103,11 @@ def login():
         f"&response_type=code&scope=identify"
     )
 
+
 @app.route("/callback")
 def callback():
     code = request.args.get("code")
     if not code:
-        flash("Erreur OAuth : code manquant", "danger")
         return redirect("/login")
 
     data = {
@@ -77,146 +124,119 @@ def callback():
     token = token_response.json()
 
     if "access_token" not in token:
-        flash("Erreur OAuth : token invalide", "danger")
         return redirect("/login")
 
     user_response = requests.get(
         DISCORD_API_URL,
         headers={"Authorization": f"Bearer {token['access_token']}"}
     )
-    user = user_response.json()
-    session["user"] = user
+
+    session["user"] = user_response.json()
     return redirect("/")
+
 
 @app.route("/logout")
 def logout():
     session.clear()
     return redirect("/login")
 
+
 # ==============================
-# DASHBOARD / PANEL
+# DASHBOARD
 # ==============================
-@app.route("/", methods=["GET", "POST"])
+@app.route("/")
 def dashboard():
     if "user" not in session:
         return redirect("/login")
 
     db = get_db()
-    if not db:
-        return "Erreur base de données", 500
 
-    search = request.args.get("search")
-    try:
-        if search:
-            users = db.execute("""
-                SELECT * FROM user_stats
-                WHERE user_id LIKE ?
-                OR (username IS NOT NULL AND LOWER(username) LIKE LOWER(?))
-                LIMIT 50
-            """, (f"%{search}%", f"%{search}%")).fetchall()
-        else:
-            users = db.execute("SELECT * FROM user_stats LIMIT 50").fetchall()
-    except sqlite3.Error as e:
-        print("Erreur BDD:", e)
-        users = []
+    search_member = request.args.get("search_member")
+    search_command = request.args.get("search_command")
 
-    # Leveling config
-    try:
-        leveling_row = db.execute("SELECT leveling_config FROM guild_settings LIMIT 1").fetchone()
-        leveling = json.loads(leveling_row["leveling_config"]) if leveling_row else {"enabled": False}
-    except:
-        leveling = {"enabled": False}
+    # MEMBERS SEARCH
+    if search_member:
+        users = db.execute("""
+            SELECT * FROM user_stats
+            WHERE user_id LIKE ?
+            OR LOWER(username) LIKE LOWER(?)
+            LIMIT 50
+        """, (f"%{search_member}%", f"%{search_member}%")).fetchall()
+    else:
+        users = db.execute("SELECT * FROM user_stats LIMIT 50").fetchall()
 
-    # SAFE counts
-    try:
-        marriages_count = db.execute("SELECT COUNT(*) FROM marriages").fetchone()[0]
-    except:
-        marriages_count = 0
+    # COMMANDS SEARCH
+    if search_command:
+        commands = db.execute("""
+            SELECT * FROM commands
+            WHERE LOWER(name) LIKE LOWER(?)
+            OR LOWER(category) LIKE LOWER(?)
+            LIMIT 50
+        """, (f"%{search_command}%", f"%{search_command}%")).fetchall()
+    else:
+        commands = db.execute("SELECT * FROM commands LIMIT 50").fetchall()
 
-    try:
-        prison_count = db.execute("SELECT COUNT(*) FROM prison").fetchone()[0]
-    except:
-        prison_count = 0
-
-    try:
-        total_balance = db.execute("SELECT SUM(balance) FROM user_stats").fetchone()[0] or 0
-    except:
-        total_balance = 0
+    # STATS
+    total_balance = db.execute("SELECT SUM(balance) FROM user_stats").fetchone()[0] or 0
+    members_count = db.execute("SELECT COUNT(*) FROM user_stats").fetchone()[0]
+    commands_count = db.execute("SELECT COUNT(*) FROM commands").fetchone()[0]
 
     db.close()
 
     return render_template(
         "dashboard.html",
         users=users,
-        leveling=leveling,
-        marriages_count=marriages_count,
-        prison_count=prison_count,
+        commands=commands,
         total_balance=total_balance,
+        members_count=members_count,
+        commands_count=commands_count,
         user=session["user"]
     )
 
+
 # ==============================
-# UPDATE BALANCE (depuis le panel)
+# UPDATE BALANCE
 # ==============================
 @app.route("/update_balance", methods=["POST"])
 def update_balance():
     user_id = request.form.get("user_id")
     balance = request.form.get("balance")
 
-    if not user_id or balance is None:
-        flash("Erreur : identifiant ou balance manquant", "danger")
-        return redirect(url_for("dashboard"))
-
     try:
         balance = int(balance)
-    except ValueError:
-        flash("Erreur : balance doit être un nombre entier", "danger")
-        return redirect(url_for("dashboard"))
+    except:
+        return redirect("/")
 
     db = get_db()
-    if db:
-        try:
-            db.execute("UPDATE user_stats SET balance = ? WHERE user_id = ?", (balance, user_id))
-            db.commit()
-        except sqlite3.Error as e:
-            print("Erreur BDD:", e)
-        db.close()
+    db.execute("UPDATE user_stats SET balance=? WHERE user_id=?",
+               (balance, user_id))
+    db.commit()
+    db.close()
 
-    flash(f"Balance de l'utilisateur {user_id} mise à jour !", "success")
-    return redirect(url_for("dashboard"))
+    return redirect("/")
+
 
 # ==============================
-# TOGGLE LEVELING (depuis le panel)
+# TOGGLE COMMAND
 # ==============================
-@app.route("/toggle_leveling", methods=["POST"])
-def toggle_leveling():
-    if "user" not in session:
-        return redirect("/login")
-
+@app.route("/toggle_command/<int:cmd_id>")
+def toggle_command(cmd_id):
     db = get_db()
-    if not db:
-        flash("Erreur base de données", "danger")
-        return redirect(url_for("dashboard"))
+    cmd = db.execute("SELECT enabled FROM commands WHERE id=?",
+                     (cmd_id,)).fetchone()
 
-    try:
-        row = db.execute("SELECT guild_id, leveling_config FROM guild_settings LIMIT 1").fetchone()
-        if row:
-            config = json.loads(row["leveling_config"])
-            config["enabled"] = not config.get("enabled", False)
-            db.execute(
-                "UPDATE guild_settings SET leveling_config = ? WHERE guild_id = ?",
-                (json.dumps(config), row["guild_id"])
-            )
-        else:
-            config = {"enabled": True}
-            db.execute(
-                "INSERT INTO guild_settings (guild_id, leveling_config) VALUES (?, ?)",
-                (1, json.dumps(config))
-            )
+    if cmd:
+        new_state = 0 if cmd["enabled"] == 1 else 1
+        db.execute("UPDATE commands SET enabled=? WHERE id=?",
+                   (new_state, cmd_id))
         db.commit()
-    except sqlite3.Error as e:
-        print("Erreur BDD:", e)
-    finally:
-        db.close()
 
-    return redirect(url_for("dashboard"))
+    db.close()
+    return redirect("/")
+
+
+# ==============================
+# RUN
+# ==============================
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000, debug=True)

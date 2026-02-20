@@ -5,7 +5,7 @@ import json
 from flask import Flask, render_template, redirect, request, session, flash, url_for
 
 # ==============================
-# APP FLASK
+# CONFIG FLASK
 # ==============================
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 app = Flask(__name__, template_folder=os.path.join(BASE_DIR, "templates"))
@@ -18,11 +18,10 @@ DATABASE = os.path.join(BASE_DIR, "main_database.db")
 # ==============================
 CLIENT_ID = os.environ.get("CLIENT_ID")
 CLIENT_SECRET = os.environ.get("CLIENT_SECRET")
-SESSION_SECRET = os.environ.get("SESSION_SECRET")
 REDIRECT_URI = os.environ.get("REDIRECT_URI")
 
-if not CLIENT_ID or not CLIENT_SECRET or not SESSION_SECRET:
-    raise RuntimeError("Variables d'environnement manquantes !")
+if not CLIENT_ID or not CLIENT_SECRET:
+    raise RuntimeError("CLIENT_ID ou CLIENT_SECRET manquant")
 
 DISCORD_AUTH_URL = "https://discord.com/api/oauth2/authorize"
 DISCORD_TOKEN_URL = "https://discord.com/api/oauth2/token"
@@ -40,19 +39,25 @@ def get_db():
 def init_db():
     db = get_db()
 
-    # TABLE USER_STATS
+    # Création table user_stats
     db.execute("""
         CREATE TABLE IF NOT EXISTS user_stats (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id TEXT,
-            username TEXT,
             xp INTEGER DEFAULT 0,
             level INTEGER DEFAULT 1,
             balance INTEGER DEFAULT 0
         )
     """)
 
-    # TABLE GUILD_SETTINGS
+    # Vérifie si colonne username existe
+    columns = db.execute("PRAGMA table_info(user_stats)").fetchall()
+    column_names = [col[1] for col in columns]
+
+    if "username" not in column_names:
+        db.execute("ALTER TABLE user_stats ADD COLUMN username TEXT")
+
+    # Guild settings
     db.execute("""
         CREATE TABLE IF NOT EXISTS guild_settings (
             guild_id INTEGER PRIMARY KEY,
@@ -60,7 +65,7 @@ def init_db():
         )
     """)
 
-    # TABLE COMMANDS
+    # Commands
     db.execute("""
         CREATE TABLE IF NOT EXISTS commands (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -71,7 +76,7 @@ def init_db():
         )
     """)
 
-    # INSERT DATA SI VIDE
+    # Data test si vide
     if db.execute("SELECT COUNT(*) FROM user_stats").fetchone()[0] == 0:
         db.execute("INSERT INTO user_stats (user_id, username, xp, level, balance) VALUES (?,?,?,?,?)",
                    ("1111", "UserOne", 150, 2, 500))
@@ -90,6 +95,7 @@ def init_db():
     db.close()
 
 
+# Initialisation au démarrage
 init_db()
 
 # ==============================
@@ -154,7 +160,7 @@ def dashboard():
     search_member = request.args.get("search_member")
     search_command = request.args.get("search_command")
 
-    # MEMBERS SEARCH
+    # Recherche membres
     if search_member:
         users = db.execute("""
             SELECT * FROM user_stats
@@ -165,7 +171,7 @@ def dashboard():
     else:
         users = db.execute("SELECT * FROM user_stats LIMIT 50").fetchall()
 
-    # COMMANDS SEARCH
+    # Recherche commandes
     if search_command:
         commands = db.execute("""
             SELECT * FROM commands
@@ -176,7 +182,6 @@ def dashboard():
     else:
         commands = db.execute("SELECT * FROM commands LIMIT 50").fetchall()
 
-    # STATS
     total_balance = db.execute("SELECT SUM(balance) FROM user_stats").fetchone()[0] or 0
     members_count = db.execute("SELECT COUNT(*) FROM user_stats").fetchone()[0]
     commands_count = db.execute("SELECT COUNT(*) FROM commands").fetchone()[0]
@@ -234,6 +239,9 @@ def toggle_command(cmd_id):
     db.close()
     return redirect("/")
 
+
+# ==============================
+# RUN
+# ==============================
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
-

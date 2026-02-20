@@ -1,206 +1,167 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-<meta charset="UTF-8">
-<title>Dashboard Bot Pro</title>
-<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<style>
-    body.dark-mode { background-color: #1f1f2e; color: #f0f0f0; }
-    .card.dark-mode { background-color: #2b2b3a; color: #f0f0f0; }
-    .table-dark-mode { background-color: #2b2b3a; color: #f0f0f0; }
-    .toggle-btn { cursor: pointer; transition: 0.2s; }
-    .toggle-btn:hover { transform: scale(1.05); }
-    .container { margin-top: 30px; }
-</style>
+    <meta charset="UTF-8">
+    <title>Dashboard Pro</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        .toggle-bg { background-color: #d1d5db; transition: all 0.3s; }
+        .toggle-on { background-color: #22c55e; transition: all 0.3s; }
+        .toggle-off { background-color: #ef4444; transition: all 0.3s; }
+    </style>
 </head>
-<body>
-<div class="container">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2>Dashboard Bot Pro</h2>
-        <div>
-            <button id="modeToggle" class="btn btn-secondary">Mode Sombre</button>
-            <a href="/logout" class="btn btn-danger">Déconnexion</a>
+<body class="bg-gray-100 text-gray-900 dark:bg-gray-900 dark:text-gray-100 transition-colors">
+
+<div class="container mx-auto p-4">
+
+    <!-- Header -->
+    <div class="flex justify-between items-center mb-6">
+        <h1 class="text-3xl font-bold">Dashboard Pro</h1>
+        <div class="flex items-center gap-4">
+            <span>Connecté comme <strong>{{ user['username'] }}</strong></span>
+            <a href="/logout" class="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600">Se déconnecter</a>
         </div>
     </div>
 
-    <!-- Sélection serveur et recherches -->
-    <form method="get" class="mb-3">
-        <div class="row g-2 align-items-center">
-            <div class="col-auto">
-                <select name="guild_id" class="form-select" onchange="this.form.submit()">
-                    <option value="">-- Tous les serveurs --</option>
-                    {% for guild in guilds %}
-                        <option value="{{ guild.id }}" {% if selected_guild == guild.id %}selected{% endif %}>
-                            {{ guild.name }}
-                        </option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div class="col-auto">
-                <input type="text" name="search_user" class="form-control" placeholder="Rechercher membre" value="{{ search_user or '' }}">
-            </div>
-            <div class="col-auto">
-                <input type="text" name="search_cmd" class="form-control" placeholder="Rechercher commande" value="{{ search_cmd or '' }}">
-            </div>
-            <div class="col-auto">
-                <button class="btn btn-primary" type="submit">Filtrer</button>
-            </div>
-        </div>
-    </form>
+    <!-- Sélecteur de serveur -->
+    <div class="mb-6">
+        <form method="get" action="/" class="flex gap-2">
+            <label for="guild_select" class="font-semibold">Choisir un serveur :</label>
+            <select id="guild_select" name="guild_id" class="border rounded px-2 py-1 flex-1">
+                <option value="">Tous les serveurs</option>
+                {% for guild in guilds %}
+                    <option value="{{ guild['id'] }}" {% if selected_guild == guild['id'] %}selected{% endif %}>
+                        {{ guild['name'] }}
+                    </option>
+                {% endfor %}
+            </select>
+            <button type="submit" class="bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600">Afficher</button>
+        </form>
+    </div>
 
     <!-- Statistiques -->
-    <div class="row mb-4">
-        <div class="col-md-3">
-            <div class="card text-bg-info mb-3">
-                <div class="card-body">
-                    <h5 class="card-title">Solde total</h5>
-                    <p class="card-text" id="totalBalance">{{ total_balance }}</p>
-                </div>
-            </div>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <div class="bg-white dark:bg-gray-800 p-4 rounded shadow">
+            <h2 class="font-semibold">Balance totale</h2>
+            <p class="text-2xl font-bold">{{ total_balance }} 💰</p>
         </div>
-        <div class="col-md-3">
-            <div class="card text-bg-warning mb-3">
-                <div class="card-body">
-                    <h5 class="card-title">En prison</h5>
-                    <p class="card-text" id="prisonCount">{{ prison_count }}</p>
-                </div>
-            </div>
+        <div class="bg-white dark:bg-gray-800 p-4 rounded shadow">
+            <h2 class="font-semibold">Membres en prison</h2>
+            <p class="text-2xl font-bold">{{ prison_count }}</p>
         </div>
-        <div class="col-md-3">
-            <div class="card text-bg-success mb-3">
-                <div class="card-body">
-                    <h5 class="card-title">Mariages</h5>
-                    <p class="card-text" id="marriagesCount">{{ marriages_count }}</p>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card text-bg-secondary mb-3">
-                <div class="card-body">
-                    <h5 class="card-title">Leveling activé</h5>
-                    <p class="card-text">{{ 'Oui' if leveling.enabled else 'Non' }}</p>
-                </div>
-            </div>
+        <div class="bg-white dark:bg-gray-800 p-4 rounded shadow">
+            <h2 class="font-semibold">Mariages</h2>
+            <p class="text-2xl font-bold">{{ marriages_count }}</p>
         </div>
     </div>
 
     <!-- Graphiques -->
-    <div class="row mb-4">
-        <div class="col-md-6">
-            <canvas id="balanceChart"></canvas>
-        </div>
-        <div class="col-md-6">
-            <canvas id="levelChart"></canvas>
+    <div class="bg-white dark:bg-gray-800 p-4 rounded shadow mb-6">
+        <h2 class="text-xl font-semibold mb-2">Graphiques statistiques</h2>
+        <canvas id="statsChart" height="150"></canvas>
+    </div>
+
+    <!-- Membres -->
+    <div class="mb-6">
+        <h2 class="text-xl font-semibold mb-2">Membres</h2>
+        <form method="get" action="/" class="mb-2 flex gap-2">
+            <input type="hidden" name="guild_id" value="{{ selected_guild }}">
+            <input type="text" name="search_user" placeholder="Rechercher un membre" class="border rounded px-2 py-1 flex-1">
+            <button type="submit" class="bg-green-500 text-white px-3 py-1 rounded hover:bg-green-600">Rechercher</button>
+        </form>
+        <div class="overflow-x-auto">
+            <table class="w-full bg-white dark:bg-gray-800 rounded shadow overflow-hidden">
+                <thead class="bg-gray-200 dark:bg-gray-700">
+                    <tr>
+                        <th class="px-4 py-2">ID</th>
+                        <th class="px-4 py-2">Nom</th>
+                        <th class="px-4 py-2">XP</th>
+                        <th class="px-4 py-2">Level</th>
+                        <th class="px-4 py-2">Balance</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for user in users %}
+                    <tr class="border-b border-gray-200 dark:border-gray-700">
+                        <td class="px-4 py-2">{{ user['user_id'] }}</td>
+                        <td class="px-4 py-2">{{ user['username'] }}</td>
+                        <td class="px-4 py-2">{{ user['xp'] }}</td>
+                        <td class="px-4 py-2">{{ user['level'] }}</td>
+                        <td class="px-4 py-2">{{ user['balance'] }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
         </div>
     </div>
 
-    <!-- Utilisateurs -->
-    <h4>Utilisateurs</h4>
-    <table class="table table-striped table-hover {% if 'dark-mode' in body_class %}table-dark-mode{% endif %}">
-        <thead>
-            <tr>
-                <th>ID</th>
-                <th>Nom</th>
-                <th>XP</th>
-                <th>Niveau</th>
-                <th>Balance</th>
-                <th>Actions</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for user in users %}
-            <tr>
-                <td>{{ user.user_id }}</td>
-                <td>{{ user.username }}</td>
-                <td>{{ user.xp }}</td>
-                <td>{{ user.level }}</td>
-                <td>{{ user.balance }}</td>
-                <td>
-                    <form method="post" action="/update_balance" class="d-inline">
-                        <input type="hidden" name="user_id" value="{{ user.user_id }}">
-                        <input type="number" name="balance" class="form-control form-control-sm d-inline w-auto" placeholder="Nouveau solde">
-                        <button class="btn btn-sm btn-primary" type="submit">Modifier</button>
-                    </form>
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-
     <!-- Commandes -->
-    <h4>Commandes</h4>
-    <table class="table table-striped table-hover {% if 'dark-mode' in body_class %}table-dark-mode{% endif %}">
-        <thead>
-            <tr>
-                <th>ID</th>
-                <th>Nom</th>
-                <th>Catégorie</th>
-                <th>Description</th>
-                <th>Activée</th>
-                <th>Actions</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for cmd in commands %}
-            <tr>
-                <td>{{ cmd.id }}</td>
-                <td>{{ cmd.name }}</td>
-                <td>{{ cmd.category }}</td>
-                <td>{{ cmd.description }}</td>
-                <td>{{ 'Oui' if cmd.enabled else 'Non' }}</td>
-                <td>
-                    <form method="post" action="/toggle_command">
-                        <input type="hidden" name="command_id" value="{{ cmd.id }}">
-                        <button class="btn btn-sm btn-warning toggle-btn" type="submit">
-                            {% if cmd.enabled %}Désactiver{% else %}Activer{% endif %}
-                        </button>
-                    </form>
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+    <div class="mb-6">
+        <h2 class="text-xl font-semibold mb-2">Commandes</h2>
+        <form method="get" action="/" class="mb-2 flex gap-2">
+            <input type="hidden" name="guild_id" value="{{ selected_guild }}">
+            <input type="text" name="search_cmd" placeholder="Rechercher une commande" class="border rounded px-2 py-1 flex-1">
+            <button type="submit" class="bg-green-500 text-white px-3 py-1 rounded hover:bg-green-600">Rechercher</button>
+        </form>
+        <div class="overflow-x-auto">
+            <table class="w-full bg-white dark:bg-gray-800 rounded shadow overflow-hidden">
+                <thead class="bg-gray-200 dark:bg-gray-700">
+                    <tr>
+                        <th class="px-4 py-2">Nom</th>
+                        <th class="px-4 py-2">Catégorie</th>
+                        <th class="px-4 py-2">Description</th>
+                        <th class="px-4 py-2">État</th>
+                        <th class="px-4 py-2">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for cmd in commands %}
+                    <tr class="border-b border-gray-200 dark:border-gray-700">
+                        <td class="px-4 py-2">{{ cmd['name'] }}</td>
+                        <td class="px-4 py-2">{{ cmd['category'] }}</td>
+                        <td class="px-4 py-2">{{ cmd['description'] }}</td>
+                        <td class="px-4 py-2">{{ 'Activée' if cmd['enabled'] else 'Désactivée' }}</td>
+                        <td class="px-4 py-2">
+                            <form method="post" action="/toggle_command">
+                                <input type="hidden" name="command_id" value="{{ cmd['id'] }}">
+                                <button type="submit" class="px-3 py-1 rounded text-white
+                                    {% if cmd['enabled'] %}bg-red-500 hover:bg-red-600{% else %}bg-green-500 hover:bg-green-600{% endif %}">
+                                    {% if cmd['enabled'] %}Désactiver{% else %}Activer{% endif %}
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
 
 </div>
 
 <script>
-    // Mode sombre
-    const toggleBtn = document.getElementById('modeToggle');
-    toggleBtn.addEventListener('click', () => {
-        document.body.classList.toggle('dark-mode');
-        toggleBtn.textContent = document.body.classList.contains('dark-mode') ? 'Mode Clair' : 'Mode Sombre';
-    });
-
-    // Graphiques Chart.js
-    const balanceChart = new Chart(document.getElementById('balanceChart'), {
+    const ctx = document.getElementById('statsChart').getContext('2d');
+    const statsChart = new Chart(ctx, {
         type: 'bar',
         data: {
-            labels: [{% for user in users %}"{{ user.username }}",{% endfor %}],
+            labels: ['Balance', 'Prison', 'Mariages'],
             datasets: [{
-                label: 'Balance',
-                data: [{% for user in users %}{{ user.balance }},{% endfor %}],
-                backgroundColor: 'rgba(54, 162, 235, 0.6)'
+                label: 'Statistiques du serveur',
+                data: [{{ total_balance }}, {{ prison_count }}, {{ marriages_count }}],
+                backgroundColor: ['#22c55e', '#ef4444', '#3b82f6']
             }]
         },
-        options: { responsive:true, plugins: { legend:{display:true} } }
-    });
-
-    const levelChart = new Chart(document.getElementById('levelChart'), {
-        type: 'line',
-        data: {
-            labels: [{% for user in users %}"{{ user.username }}",{% endfor %}],
-            datasets: [{
-                label: 'Niveau',
-                data: [{% for user in users %}{{ user.level }},{% endfor %}],
-                backgroundColor: 'rgba(255, 99, 132, 0.6)',
-                borderColor: 'rgba(255, 99, 132, 1)',
-                fill: true,
-                tension: 0.3
-            }]
-        },
-        options: { responsive:true, plugins:{ legend:{display:true} } }
+        options: {
+            responsive: true,
+            plugins: { legend: { display: false } },
+            scales: { y: { beginAtZero: true } }
+        }
     });
 </script>
+
 </body>
 </html>

@@ -4,18 +4,21 @@
 <meta charset="UTF-8">
 <title>Dashboard</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
 <style>
 :root{
-    --bg:#1e1f22;
-    --sidebar:#111214;
-    --card:#2b2d31;
+    --bg:#18191c;
+    --sidebar:#202225;
+    --card:#242526;
     --hover:#3a3d42;
     --accent:#5865F2;
     --green:#3ba55d;
     --red:#ed4245;
+    --yellow:#f1c40f;
     --text:#f2f3f5;
-    --muted:#9ca3af;
+    --muted:#b0b3b8;
+    --shadow:rgba(0,0,0,0.5);
 }
 
 *{box-sizing:border-box;margin:0;padding:0;font-family:'Inter',sans-serif;}
@@ -23,76 +26,86 @@ body{background:var(--bg);color:var(--text);display:flex;height:100vh;}
 
 /* SIDEBAR */
 .sidebar{
-    width:260px;
+    width:280px;
     background:var(--sidebar);
     padding:25px;
     display:flex;
     flex-direction:column;
+    transition:0.3s;
 }
-.logo{font-size:22px;font-weight:700;margin-bottom:40px;color:var(--accent);}
+.logo{font-size:26px;font-weight:700;margin-bottom:40px;color:var(--accent);text-align:center;}
 .nav-item{
     padding:12px 15px;
-    border-radius:10px;
-    margin-bottom:8px;
+    border-radius:12px;
+    margin-bottom:10px;
     cursor:pointer;
     display:flex;
     align-items:center;
-    gap:10px;
+    gap:12px;
     transition:0.2s;
+    color:var(--text);
+    font-weight:500;
 }
 .nav-item:hover{background:var(--hover);}
-.nav-item.active{background:var(--accent);}
+.nav-item.active{background:var(--accent);color:white;box-shadow:0 4px 10px var(--shadow);}
 
 /* MAIN */
 .main{flex:1;padding:30px 40px;overflow:auto;}
 
 /* HEADER */
 .header{display:flex;justify-content:space-between;align-items:center;margin-bottom:30px;}
-.header h1{font-size:26px;font-weight:700;}
-.user-badge{background:var(--card);padding:8px 14px;border-radius:20px;font-size:14px;color:var(--muted);}
+.header h1{font-size:28px;font-weight:700;}
+.user-badge{background:var(--card);padding:8px 16px;border-radius:25px;font-size:14px;color:var(--muted);font-weight:500;}
 
-/* STATS */
+/* STATS CARDS */
 .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:20px;margin-bottom:30px;}
-.card{background:var(--card);padding:20px;border-radius:15px;transition:0.2s;}
-.card:hover{transform:translateY(-4px);box-shadow:0 10px 25px rgba(0,0,0,0.4);}
-.card-title{font-size:14px;color:var(--muted);margin-bottom:10px;}
+.card{background:var(--card);padding:20px;border-radius:15px;transition:0.3s;box-shadow:0 4px 15px var(--shadow);}
+.card:hover{transform:translateY(-5px);box-shadow:0 12px 25px var(--shadow);}
+.card-title{font-size:14px;color:var(--muted);margin-bottom:10px;text-transform:uppercase;letter-spacing:0.5px;}
 .card-value{font-size:28px;font-weight:700;}
 
-/* TABLE */
-.table-container{background:var(--card);border-radius:15px;padding:20px;}
+/* TABLES */
+.table-container{background:var(--card);border-radius:15px;padding:20px;box-shadow:0 4px 12px var(--shadow);}
 table{width:100%;border-collapse:collapse;}
 th{text-align:left;font-size:13px;color:var(--muted);padding-bottom:15px;}
 td{padding:15px 0;border-top:1px solid #3f4147;font-size:14px;}
-tr:hover{background:var(--hover);}
-.badge{padding:5px 10px;border-radius:20px;font-size:12px;}
-.badge-level{background:var(--accent);}
-.badge-money{background:var(--green);}
-.action-btn{background:var(--accent);border:none;padding:6px 12px;border-radius:8px;cursor:pointer;color:white;transition:0.2s;}
+tr:hover{background:var(--hover);transition:0.2s;}
+.badge{padding:5px 10px;border-radius:20px;font-size:12px;font-weight:600;}
+.badge-level{background:var(--accent);color:white;}
+.badge-money{background:var(--green);color:white;}
+.badge-enabled{background:var(--green);color:white;}
+.badge-disabled{background:var(--red);color:white;}
+.badge-category{padding:4px 8px;border-radius:8px;background:var(--yellow);color:black;font-size:12px;}
+
+/* ACTION BUTTONS */
+.action-btn{background:var(--accent);border:none;padding:6px 12px;border-radius:8px;cursor:pointer;color:white;transition:0.2s;font-weight:500;}
 .action-btn:hover{background:#4752c4;}
 
 /* SEARCH */
 .search{margin-bottom:15px;}
-.search input{width:100%;padding:10px 15px;border-radius:10px;border:none;background:#202225;color:white;outline:none;}
+.search input{width:100%;padding:10px 15px;border-radius:12px;border:none;background:#2c2f33;color:white;outline:none;transition:0.2s;}
+.search input:focus{background:#3a3d42;}
 
+/* SECTIONS */
 section{display:none;}
 section.active{display:block;}
 </style>
 </head>
-<body>
 
+<body>
 <div class="sidebar">
-    <div class="logo">Bot Dashboard</div>
-    <div class="nav-item active" onclick="showSection('overview')">🏠 Overview</div>
-    <div class="nav-item" onclick="showSection('members')">👥 Members</div>
-    <div class="nav-item" onclick="showSection('commands')">⚡ Commands</div>
-    <div class="nav-item" onclick="showSection('settings')">⚙️ Settings</div>
-    <div class="nav-item" onclick="showSection('stats')">📊 Analytics</div>
+    <div class="logo"><i class="fa-brands fa-discord"></i> Bot Dashboard</div>
+    <div class="nav-item active" onclick="showSection('overview')"><i class="fa-solid fa-house"></i> Overview</div>
+    <div class="nav-item" onclick="showSection('members')"><i class="fa-solid fa-users"></i> Members</div>
+    <div class="nav-item" onclick="showSection('commands')"><i class="fa-solid fa-bolt"></i> Commands</div>
+    <div class="nav-item" onclick="showSection('settings')"><i class="fa-solid fa-gear"></i> Settings</div>
+    <div class="nav-item" onclick="showSection('stats')"><i class="fa-solid fa-chart-line"></i> Analytics</div>
 </div>
 
 <div class="main">
 <div class="header">
     <h1>Dashboard</h1>
-    <div class="user-badge">{{ user.username }}</div>
+    <div class="user-badge"><i class="fa-solid fa-user"></i> {{ user.username }}</div>
 </div>
 
 <!-- OVERVIEW -->
@@ -114,9 +127,9 @@ section.active{display:block;}
         <div class="card-title">Leveling</div>
         <div class="card-value">
             {% if leveling.enabled %}
-                <span style="color:var(--green)">Enabled</span>
+                <span class="badge-enabled">Enabled</span>
             {% else %}
-                <span style="color:var(--red)">Disabled</span>
+                <span class="badge-disabled">Disabled</span>
             {% endif %}
         </div>
     </div>
@@ -146,8 +159,8 @@ section.active{display:block;}
         <td>{{ u.username }}</td>
         <td>{{ u.guild_id }}</td>
         <td>{{ u.xp }}</td>
-        <td><span class="badge badge-level">{{ u.level }}</span></td>
-        <td><span class="badge badge-money">{{ u.balance }}</span></td>
+        <td><span class="badge-level">{{ u.level }}</span></td>
+        <td><span class="badge-money">{{ u.balance }}</span></td>
         <td>
             <form action="{{ url_for('update_balance') }}" method="POST">
                 <input type="hidden" name="user_id" value="{{ u.user_id }}">
@@ -181,7 +194,7 @@ section.active{display:block;}
     {% for cmd in commands %}
     <tr>
         <td>{{ cmd.name }}</td>
-        <td>{{ cmd.category }}</td>
+        <td><span class="badge-category">{{ cmd.category }}</span></td>
         <td>{{ cmd.description }}</td>
         <td>{% if cmd.enabled %}✅{% else %}❌{% endif %}</td>
     </tr>
@@ -191,9 +204,7 @@ section.active{display:block;}
 </div>
 </section>
 
-<!-- SETTINGS -->
 <section id="settings"><h2>Settings Panel</h2></section>
-<!-- STATS -->
 <section id="stats"><h2>Advanced Analytics</h2></section>
 
 </div>

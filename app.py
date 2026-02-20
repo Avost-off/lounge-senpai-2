@@ -10,6 +10,7 @@ from flask import Flask, render_template, redirect, request, session, flash, url
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 app = Flask(__name__, template_folder=os.path.join(BASE_DIR, "templates"))
 app.secret_key = os.environ.get("SESSION_SECRET", "CHANGE_THIS_SECRET_KEY")
+
 DATABASE = os.path.join(BASE_DIR, "main_database.db")
 
 # ==============================
@@ -37,8 +38,7 @@ def get_db():
 
 def init_db():
     db = get_db()
-
-    # Table users multi-serveur
+    # Tables principales
     db.execute("""
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -52,8 +52,6 @@ def init_db():
             UNIQUE(guild_id, user_id)
         )
     """)
-
-    # Table commandes
     db.execute("""
         CREATE TABLE IF NOT EXISTS commands (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -65,8 +63,6 @@ def init_db():
             required_role TEXT DEFAULT 'member'
         )
     """)
-
-    # Table marriages
     db.execute("""
         CREATE TABLE IF NOT EXISTS marriages (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -77,8 +73,6 @@ def init_db():
             UNIQUE(guild_id, user1, user2)
         )
     """)
-
-    # Table prison
     db.execute("""
         CREATE TABLE IF NOT EXISTS prison (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -91,17 +85,27 @@ def init_db():
             saved_roles TEXT
         )
     """)
-
-    # Table guild_settings
     db.execute("""
         CREATE TABLE IF NOT EXISTS guild_settings (
             guild_id TEXT PRIMARY KEY,
             leveling_config TEXT DEFAULT '{"enabled": true}'
         )
     """)
-
     db.commit()
     db.close()
+
+# ==============================
+# Discord admin guilds filter
+# ==============================
+def get_user_guilds(token):
+    try:
+        resp = requests.get(DISCORD_GUILDS_URL, headers={"Authorization": f"Bearer {token}"})
+        guilds = resp.json()
+        # Filter guilds where user is admin (permissions bit 0x8)
+        admin_guilds = [g for g in guilds if int(g.get("permissions", 0)) & 0x8]
+        return admin_guilds
+    except:
+        return []
 
 # ==============================
 # LOGIN / OAUTH2
@@ -118,8 +122,7 @@ def login():
 def callback():
     code = request.args.get("code")
     if not code:
-        flash("Erreur OAuth : code manquant", "danger")
-        return redirect("/login")
+        return "Erreur OAuth : code manquant"
 
     data = {
         "client_id": CLIENT_ID,
@@ -131,18 +134,17 @@ def callback():
     headers = {"Content-Type": "application/x-www-form-urlencoded"}
     token_resp = requests.post(DISCORD_TOKEN_URL, data=data, headers=headers)
     token_json = token_resp.json()
-
     if "access_token" not in token_json:
-        flash("Erreur OAuth : token invalide", "danger")
-        return redirect("/login")
+        return "Erreur OAuth : token invalide"
 
     access_token = token_json["access_token"]
 
-    # Stockage léger dans session
-    user_resp = requests.get(DISCORD_API_URL, headers={"Authorization": f"Bearer {access_token}"})
-    user = user_resp.json()
-    session["user_id"] = user["id"]
-    session["username"] = user["username"]
+    # Récupération user + guilds
+    user = requests.get(DISCORD_API_URL, headers={"Authorization": f"Bearer {access_token}"}).json()
+    guilds = get_user_guilds(access_token)
+
+    session["user"] = user
+    session["guilds"] = guilds
     session["token"] = access_token
 
     return redirect("/")
@@ -153,56 +155,42 @@ def logout():
     return redirect("/login")
 
 # ==============================
-# UTILS
-# ==============================
-def get_user_guilds(token):
-    try:
-        resp = requests.get(DISCORD_GUILDS_URL, headers={"Authorization": f"Bearer {token}"})
-        return resp.json()
-    except:
-        return []
-
-# ==============================
 # DASHBOARD
 # ==============================
-@app.route("/", methods=["GET"])
+@app.route("/")
 def dashboard():
-    if "user_id" not in session:
+    if "user" not in session:
         return redirect("/login")
 
     db = get_db()
-
-    # Serveur sélectionné
-    selected_guild = request.args.get("guild_id")
+    guild_id = request.args.get("guild_id")
+    search_user = request.args.get("search_user")
+    search_cmd = request.args.get("search_cmd")
 
     # Membres
-    search_user = request.args.get("search_user")
-    users_query = "SELECT * FROM users"
-    params = []
-
-    if selected_guild:
-        users_query += " WHERE guild_id = ?"
-        params.append(selected_guild)
-
-    if search_user:
-        users_query += " AND (user_id LIKE ? OR LOWER(username) LIKE LOWER(?))" if params else " WHERE (user_id LIKE ? OR LOWER(username) LIKE LOWER(?))"
-        params += [f"%{search_user}%", f"%{search_user}%"]
-
-    users = db.execute(users_query, params).fetchall()
+    if guild_id:
+        users_query = "SELECT * FROM users WHERE guild_id = ?"
+        params = [guild_id]
+        if search_user:
+            users_query += " AND (user_id LIKE ? OR LOWER(username) LIKE LOWER(?))"
+            params += [f"%{search_user}%", f"%{search_user}%"]
+        users = db.execute(users_query, params).fetchall()
+    else:
+        users = db.execute("SELECT * FROM users LIMIT 50").fetchall()
 
     # Commandes
-    search_cmd = request.args.get("search_cmd")
     cmd_query = "SELECT * FROM commands"
     cmd_params = []
-
-    if selected_guild:
+    if guild_id:
         cmd_query += " WHERE guild_id = ?"
-        cmd_params.append(selected_guild)
-
-    if search_cmd:
-        cmd_query += " AND (name LIKE ? OR category LIKE ? OR description LIKE ?)" if cmd_params else " WHERE (name LIKE ? OR category LIKE ? OR description LIKE ?)"
-        cmd_params += [f"%{search_cmd}%"]*3
-
+        cmd_params.append(guild_id)
+        if search_cmd:
+            cmd_query += " AND (name LIKE ? OR category LIKE ? OR description LIKE ?)"
+            cmd_params += [f"%{search_cmd}%"]*3
+    else:
+        if search_cmd:
+            cmd_query += " WHERE name LIKE ? OR category LIKE ? OR description LIKE ?"
+            cmd_params += [f"%{search_cmd}%"]*3
     commands = db.execute(cmd_query, cmd_params).fetchall()
 
     # Stats
@@ -210,13 +198,11 @@ def dashboard():
     prison_count = db.execute("SELECT COUNT(*) FROM prison").fetchone()[0]
     marriages_count = db.execute("SELECT COUNT(*) FROM marriages").fetchone()[0]
 
-    # Leveling config (premier serveur ou celui sélectionné)
+    # Leveling
     leveling_row = db.execute("SELECT leveling_config FROM guild_settings LIMIT 1").fetchone()
     leveling = json.loads(leveling_row["leveling_config"]) if leveling_row else {"enabled": False}
 
     db.close()
-
-    guilds = get_user_guilds(session["token"])
 
     return render_template(
         "dashboard.html",
@@ -226,9 +212,9 @@ def dashboard():
         prison_count=prison_count,
         marriages_count=marriages_count,
         leveling=leveling,
-        user={"id": session["user_id"], "username": session["username"]},
-        guilds=guilds,
-        selected_guild=selected_guild
+        user=session["user"],
+        guilds=session.get("guilds", []),
+        selected_guild=guild_id
     )
 
 # ==============================
@@ -247,6 +233,7 @@ def update_balance():
     db.execute("UPDATE users SET balance = ? WHERE user_id = ?", (balance, user_id))
     db.commit()
     db.close()
+
     return redirect(url_for("dashboard"))
 
 # ==============================
@@ -265,7 +252,7 @@ def toggle_command():
     return redirect(url_for("dashboard"))
 
 # ==============================
-# INIT DB & RUN
+# INIT & RUN
 # ==============================
 init_db()
 if __name__ == "__main__":

@@ -4,18 +4,15 @@ import requests
 import json
 from flask import Flask, render_template, redirect, request, session, flash, url_for
 
-# ==============================
-# CONFIG FLASK
-# ==============================
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 app = Flask(__name__, template_folder=os.path.join(BASE_DIR, "templates"))
 app.secret_key = os.environ.get("SESSION_SECRET", "CHANGE_THIS_SECRET_KEY")
 
 DATABASE = os.path.join(BASE_DIR, "main_database.db")
 
-# ==============================
-# DISCORD OAUTH CONFIG
-# ==============================
+# --------------------
+# Discord OAuth
+# --------------------
 CLIENT_ID = os.environ.get("CLIENT_ID")
 CLIENT_SECRET = os.environ.get("CLIENT_SECRET")
 REDIRECT_URI = os.environ.get("REDIRECT_URI")
@@ -27,35 +24,44 @@ DISCORD_AUTH_URL = "https://discord.com/api/oauth2/authorize"
 DISCORD_TOKEN_URL = "https://discord.com/api/oauth2/token"
 DISCORD_API_URL = "https://discord.com/api/users/@me"
 
-# ==============================
-# DATABASE
-# ==============================
+# --------------------
+# Database helpers
+# --------------------
 def get_db():
     conn = sqlite3.connect(DATABASE, timeout=10)
     conn.row_factory = sqlite3.Row
     return conn
 
-
 def init_db():
     db = get_db()
 
-    # Création table user_stats
+    # Crée la table si elle n'existe pas
     db.execute("""
         CREATE TABLE IF NOT EXISTS user_stats (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id TEXT,
-            xp INTEGER DEFAULT 0,
-            level INTEGER DEFAULT 1,
-            balance INTEGER DEFAULT 0
+            user_id TEXT
         )
     """)
 
-    # Vérifie si colonne username existe
+    # Vérifie colonnes existantes
     columns = db.execute("PRAGMA table_info(user_stats)").fetchall()
     column_names = [col[1] for col in columns]
 
+    # Ajoute username si manquant
     if "username" not in column_names:
         db.execute("ALTER TABLE user_stats ADD COLUMN username TEXT")
+
+    # Ajoute xp si manquant
+    if "xp" not in column_names:
+        db.execute("ALTER TABLE user_stats ADD COLUMN xp INTEGER DEFAULT 0")
+
+    # Ajoute level si manquant
+    if "level" not in column_names:
+        db.execute("ALTER TABLE user_stats ADD COLUMN level INTEGER DEFAULT 1")
+
+    # Ajoute balance si manquant
+    if "balance" not in column_names:
+        db.execute("ALTER TABLE user_stats ADD COLUMN balance INTEGER DEFAULT 0")
 
     # Guild settings
     db.execute("""
@@ -65,7 +71,7 @@ def init_db():
         )
     """)
 
-    # Commands
+    # Commands table
     db.execute("""
         CREATE TABLE IF NOT EXISTS commands (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -76,7 +82,7 @@ def init_db():
         )
     """)
 
-    # Data test si vide
+    # Insert test data si vide
     if db.execute("SELECT COUNT(*) FROM user_stats").fetchone()[0] == 0:
         db.execute("INSERT INTO user_stats (user_id, username, xp, level, balance) VALUES (?,?,?,?,?)",
                    ("1111", "UserOne", 150, 2, 500))
@@ -94,13 +100,12 @@ def init_db():
     db.commit()
     db.close()
 
-
-# Initialisation au démarrage
+# Initialise DB
 init_db()
 
-# ==============================
+# --------------------
 # LOGIN
-# ==============================
+# --------------------
 @app.route("/login")
 def login():
     return redirect(
@@ -108,7 +113,6 @@ def login():
         f"&redirect_uri={REDIRECT_URI}"
         f"&response_type=code&scope=identify"
     )
-
 
 @app.route("/callback")
 def callback():
@@ -140,23 +144,20 @@ def callback():
     session["user"] = user_response.json()
     return redirect("/")
 
-
 @app.route("/logout")
 def logout():
     session.clear()
     return redirect("/login")
 
-
-# ==============================
+# --------------------
 # DASHBOARD
-# ==============================
+# --------------------
 @app.route("/")
 def dashboard():
     if "user" not in session:
         return redirect("/login")
 
     db = get_db()
-
     search_member = request.args.get("search_member")
     search_command = request.args.get("search_command")
 
@@ -198,10 +199,9 @@ def dashboard():
         user=session["user"]
     )
 
-
-# ==============================
+# --------------------
 # UPDATE BALANCE
-# ==============================
+# --------------------
 @app.route("/update_balance", methods=["POST"])
 def update_balance():
     user_id = request.form.get("user_id")
@@ -217,31 +217,26 @@ def update_balance():
                (balance, user_id))
     db.commit()
     db.close()
-
     return redirect("/")
 
-
-# ==============================
+# --------------------
 # TOGGLE COMMAND
-# ==============================
+# --------------------
 @app.route("/toggle_command/<int:cmd_id>")
 def toggle_command(cmd_id):
     db = get_db()
-    cmd = db.execute("SELECT enabled FROM commands WHERE id=?",
-                     (cmd_id,)).fetchone()
+    cmd = db.execute("SELECT enabled FROM commands WHERE id=?", (cmd_id,)).fetchone()
 
     if cmd:
         new_state = 0 if cmd["enabled"] == 1 else 1
-        db.execute("UPDATE commands SET enabled=? WHERE id=?",
-                   (new_state, cmd_id))
+        db.execute("UPDATE commands SET enabled=? WHERE id=?", (new_state, cmd_id))
         db.commit()
 
     db.close()
     return redirect("/")
 
-
-# ==============================
+# --------------------
 # RUN
-# ==============================
+# --------------------
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))

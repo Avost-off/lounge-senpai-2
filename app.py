@@ -39,52 +39,65 @@ def get_db():
 
 def init_db():
     db = get_db()
+    if not db:
+        print("Erreur DB")
+        return
 
+    # ===============================
+    # TABLE GUILDS
+    # ===============================
     db.execute("""
-        CREATE TABLE IF NOT EXISTS user_stats (
+        CREATE TABLE IF NOT EXISTS guilds (
+            guild_id TEXT PRIMARY KEY,
+            name TEXT,
+            owner_id TEXT,
+            created_at TEXT
+        )
+    """)
+
+    # ===============================
+    # TABLE USERS (multi-serveur)
+    # ===============================
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            guild_id TEXT NOT NULL,
-            user_id TEXT NOT NULL,
+            guild_id TEXT,
+            user_id TEXT,
             username TEXT,
             xp INTEGER DEFAULT 0,
             level INTEGER DEFAULT 1,
-            balance INTEGER DEFAULT 0
+            balance INTEGER DEFAULT 0,
+            in_prison INTEGER DEFAULT 0,
+            UNIQUE(guild_id, user_id)
         )
     """)
 
-    db.execute("""
-        CREATE TABLE IF NOT EXISTS guild_settings (
-            guild_id TEXT PRIMARY KEY,
-            leveling_config TEXT DEFAULT '{"enabled": true}'
-        )
-    """)
-
-    db.execute("""
-        CREATE TABLE IF NOT EXISTS marriages (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            guild_id TEXT NOT NULL,
-            user1_id TEXT NOT NULL,
-            user2_id TEXT NOT NULL,
-            marriage_timestamp TEXT NOT NULL
-        )
-    """)
-
-    db.execute("""
-        CREATE TABLE IF NOT EXISTS prison (
-            guild_id TEXT NOT NULL,
-            user_id TEXT NOT NULL,
-            PRIMARY KEY (guild_id, user_id)
-        )
-    """)
-
+    # ===============================
+    # TABLE COMMANDS
+    # ===============================
     db.execute("""
         CREATE TABLE IF NOT EXISTS commands (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            guild_id TEXT,
             name TEXT,
             category TEXT,
             description TEXT,
             enabled INTEGER DEFAULT 1,
             required_role TEXT DEFAULT 'member'
+        )
+    """)
+
+    # ===============================
+    # TABLE MARRIAGES
+    # ===============================
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS marriages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            guild_id TEXT,
+            user1 TEXT,
+            user2 TEXT,
+            marriage_timestamp TEXT,
+            UNIQUE(guild_id, user1, user2)
         )
     """)
 

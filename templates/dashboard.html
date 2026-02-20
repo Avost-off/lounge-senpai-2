@@ -2,286 +2,225 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
-<title>Bot Dashboard</title>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+<title>Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 
 <style>
 :root{
---bg:#1e1f22;
---sidebar:#111214;
---card:#2b2d31;
---hover:#3a3d42;
---accent:#5865F2;
---green:#3ba55d;
---red:#ed4245;
---text:#f2f3f5;
---muted:#9ca3af;
+    --bg:#1e1f22;
+    --sidebar:#111214;
+    --card:#2b2d31;
+    --hover:#3a3d42;
+    --accent:#5865F2;
+    --green:#3ba55d;
+    --red:#ed4245;
+    --text:#f2f3f5;
+    --muted:#9ca3af;
 }
 
-*{margin:0;padding:0;box-sizing:border-box;font-family:Inter;}
-
-body{display:flex;background:var(--bg);color:var(--text);}
+*{box-sizing:border-box;margin:0;padding:0;font-family:'Inter',sans-serif;}
+body{background:var(--bg);color:var(--text);display:flex;height:100vh;}
 
 /* SIDEBAR */
 .sidebar{
-width:250px;
-height:100vh;
-background:var(--sidebar);
-padding:25px;
+    width:260px;
+    background:var(--sidebar);
+    padding:25px;
+    display:flex;
+    flex-direction:column;
 }
-
-.logo{
-font-size:22px;
-font-weight:700;
-color:var(--accent);
-margin-bottom:40px;
-}
-
+.logo{font-size:22px;font-weight:700;margin-bottom:40px;color:var(--accent);}
 .nav-item{
-padding:12px;
-border-radius:10px;
-margin-bottom:8px;
-cursor:pointer;
-transition:.2s;
+    padding:12px 15px;
+    border-radius:10px;
+    margin-bottom:8px;
+    cursor:pointer;
+    display:flex;
+    align-items:center;
+    gap:10px;
+    transition:0.2s;
 }
-
 .nav-item:hover{background:var(--hover);}
 .nav-item.active{background:var(--accent);}
 
 /* MAIN */
-.main{flex:1;padding:30px;overflow:auto;}
+.main{flex:1;padding:30px 40px;overflow:auto;}
 
-.header{
-display:flex;
-justify-content:space-between;
-margin-bottom:30px;
-}
+/* HEADER */
+.header{display:flex;justify-content:space-between;align-items:center;margin-bottom:30px;}
+.header h1{font-size:26px;font-weight:700;}
+.user-badge{background:var(--card);padding:8px 14px;border-radius:20px;font-size:14px;color:var(--muted);}
 
-.card{
-background:var(--card);
-padding:20px;
-border-radius:15px;
-margin-bottom:25px;
-}
+/* STATS */
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:20px;margin-bottom:30px;}
+.card{background:var(--card);padding:20px;border-radius:15px;transition:0.2s;}
+.card:hover{transform:translateY(-4px);box-shadow:0 10px 25px rgba(0,0,0,0.4);}
+.card-title{font-size:14px;color:var(--muted);margin-bottom:10px;}
+.card-value{font-size:28px;font-weight:700;}
 
-.table-container{
-background:var(--card);
-padding:20px;
-border-radius:15px;
-}
-
-input,select{
-padding:10px;
-border:none;
-border-radius:8px;
-background:#202225;
-color:white;
-outline:none;
-}
-
-table{
-width:100%;
-border-collapse:collapse;
-}
-
-th,td{
-padding:12px;
-border-top:1px solid #3f4147;
-}
-
-th{
-cursor:pointer;
-color:var(--muted);
-}
-
+/* TABLE */
+.table-container{background:var(--card);border-radius:15px;padding:20px;}
+table{width:100%;border-collapse:collapse;}
+th{text-align:left;font-size:13px;color:var(--muted);padding-bottom:15px;}
+td{padding:15px 0;border-top:1px solid #3f4147;font-size:14px;}
 tr:hover{background:var(--hover);}
+.badge{padding:5px 10px;border-radius:20px;font-size:12px;}
+.badge-level{background:var(--accent);}
+.badge-money{background:var(--green);}
+.action-btn{background:var(--accent);border:none;padding:6px 12px;border-radius:8px;cursor:pointer;color:white;transition:0.2s;}
+.action-btn:hover{background:#4752c4;}
 
-.badge{
-padding:5px 10px;
-border-radius:20px;
-font-size:12px;
-}
-
-.enabled{background:var(--green);}
-.disabled{background:var(--red);}
-
-.action-btn{
-background:var(--accent);
-border:none;
-padding:5px 10px;
-border-radius:6px;
-cursor:pointer;
-color:white;
-}
-
-.pagination button{
-margin:5px;
-}
+/* SEARCH */
+.search{margin-bottom:15px;}
+.search input{width:100%;padding:10px 15px;border-radius:10px;border:none;background:#202225;color:white;outline:none;}
 
 section{display:none;}
 section.active{display:block;}
 </style>
 </head>
-
 <body>
 
 <div class="sidebar">
-<div class="logo">Bot Panel</div>
-<div class="nav-item active" onclick="showSection('members')">👥 Members</div>
-<div class="nav-item" onclick="showSection('commands')">⚡ Commands</div>
+    <div class="logo">Bot Dashboard</div>
+    <div class="nav-item active" onclick="showSection('overview')">🏠 Overview</div>
+    <div class="nav-item" onclick="showSection('members')">👥 Members</div>
+    <div class="nav-item" onclick="showSection('commands')">⚡ Commands</div>
+    <div class="nav-item" onclick="showSection('settings')">⚙️ Settings</div>
+    <div class="nav-item" onclick="showSection('stats')">📊 Analytics</div>
 </div>
 
 <div class="main">
-
 <div class="header">
-<h1>Dashboard</h1>
-<div>{{ user.username }}</div>
+    <h1>Dashboard</h1>
+    <div class="user-badge">{{ user.username }}</div>
 </div>
 
+<!-- OVERVIEW -->
+<section id="overview" class="active">
+<div class="stats">
+    <div class="card">
+        <div class="card-title">Total Balance</div>
+        <div class="card-value">{{ total_balance }}</div>
+    </div>
+    <div class="card">
+        <div class="card-title">Users in Prison</div>
+        <div class="card-value">{{ prison_count }}</div>
+    </div>
+    <div class="card">
+        <div class="card-title">Marriages</div>
+        <div class="card-value">{{ marriages_count }}</div>
+    </div>
+    <div class="card">
+        <div class="card-title">Leveling</div>
+        <div class="card-value">
+            {% if leveling.enabled %}
+                <span style="color:var(--green)">Enabled</span>
+            {% else %}
+                <span style="color:var(--red)">Disabled</span>
+            {% endif %}
+        </div>
+    </div>
+</div>
+</section>
+
 <!-- MEMBERS -->
-<section id="members" class="active">
+<section id="members">
 <div class="table-container">
-
-<input type="text" id="searchMembers" placeholder="Search members...">
-
+<div class="search">
+    <input type="text" id="searchMembers" placeholder="Search members...">
+</div>
 <table id="membersTable">
 <thead>
-<tr>
-<th>User</th>
-<th>XP</th>
-<th>Level</th>
-<th>Money</th>
-</tr>
+    <tr>
+        <th>User</th>
+        <th>Guild</th>
+        <th>XP</th>
+        <th>Level</th>
+        <th>Balance</th>
+        <th>Action</th>
+    </tr>
 </thead>
 <tbody>
-{% for u in users %}
-<tr>
-<td>{{ u.user_id }}</td>
-<td>{{ u.xp }}</td>
-<td>{{ u.level }}</td>
-<td>{{ u.money }}</td>
-</tr>
-{% endfor %}
+    {% for u in users %}
+    <tr>
+        <td>{{ u.username }}</td>
+        <td>{{ u.guild_id }}</td>
+        <td>{{ u.xp }}</td>
+        <td><span class="badge badge-level">{{ u.level }}</span></td>
+        <td><span class="badge badge-money">{{ u.balance }}</span></td>
+        <td>
+            <form action="{{ url_for('update_balance') }}" method="POST">
+                <input type="hidden" name="user_id" value="{{ u.user_id }}">
+                <input type="number" name="balance" value="{{ u.balance }}" style="width:80px;">
+                <button class="action-btn">Update</button>
+            </form>
+        </td>
+    </tr>
+    {% endfor %}
 </tbody>
 </table>
-
 </div>
 </section>
 
 <!-- COMMANDS -->
 <section id="commands">
 <div class="table-container">
-
-<div style="display:flex;gap:15px;margin-bottom:15px;">
-<input type="text" id="searchCommands" placeholder="Search commands...">
-<select id="filterCategory">
-<option value="all">All</option>
-<option value="moderation">Moderation</option>
-<option value="economy">Economy</option>
-<option value="fun">Fun</option>
-<option value="utility">Utility</option>
-</select>
+<div class="search">
+    <input type="text" id="searchCommands" placeholder="Search commands...">
 </div>
-
 <table id="commandsTable">
 <thead>
-<tr>
-<th onclick="sortTable(0)">Name</th>
-<th onclick="sortTable(1)">Category</th>
-<th>Role</th>
-<th>Status</th>
-</tr>
+    <tr>
+        <th>Name</th>
+        <th>Category</th>
+        <th>Description</th>
+        <th>Status</th>
+    </tr>
 </thead>
-<tbody id="commandsBody">
-{% for cmd in commands %}
-<tr>
-<td>{{ cmd.name }}</td>
-<td>{{ cmd.category }}</td>
-<td>{{ cmd.required_role }}</td>
-<td>
-<span class="badge {{ 'enabled' if cmd.enabled else 'disabled' }}">
-{{ 'Enabled' if cmd.enabled else 'Disabled' }}
-</span>
-</td>
-</tr>
-{% endfor %}
+<tbody>
+    {% for cmd in commands %}
+    <tr>
+        <td>{{ cmd.name }}</td>
+        <td>{{ cmd.category }}</td>
+        <td>{{ cmd.description }}</td>
+        <td>{% if cmd.enabled %}✅{% else %}❌{% endif %}</td>
+    </tr>
+    {% endfor %}
 </tbody>
 </table>
-
-<div class="pagination" id="pagination"></div>
-
 </div>
 </section>
+
+<!-- SETTINGS -->
+<section id="settings"><h2>Settings Panel</h2></section>
+<!-- STATS -->
+<section id="stats"><h2>Advanced Analytics</h2></section>
 
 </div>
 
 <script>
 function showSection(id){
-document.querySelectorAll("section").forEach(s=>s.classList.remove("active"));
-document.getElementById(id).classList.add("active");
+    document.querySelectorAll('section').forEach(s=>s.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+    document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+    event.target.classList.add('active');
 }
 
-/* SEARCH MEMBERS */
-document.getElementById("searchMembers").addEventListener("keyup",function(){
-let filter=this.value.toLowerCase();
-document.querySelectorAll("#membersTable tbody tr").forEach(row=>{
-row.style.display=row.innerText.toLowerCase().includes(filter)?"":"none";
-});
-});
-
-/* SEARCH + FILTER + PAGINATION COMMANDS */
-const rowsPerPage=6;
-let currentPage=1;
-
-function updateCommands(){
-const filter=document.getElementById("searchCommands").value.toLowerCase();
-const category=document.getElementById("filterCategory").value;
-const rows=[...document.querySelectorAll("#commandsBody tr")];
-
-rows.forEach(row=>{
-let text=row.innerText.toLowerCase();
-let rowCat=row.children[1].innerText.toLowerCase();
-let visible=text.includes(filter);
-if(category!="all") visible=visible&&rowCat===category;
-row.style.display=visible?"":"none";
+// Members search
+document.getElementById("searchMembers").addEventListener("keyup", function() {
+    let filter = this.value.toLowerCase();
+    document.querySelectorAll("#membersTable tbody tr").forEach(row => {
+        row.style.display = row.innerText.toLowerCase().includes(filter) ? "" : "none";
+    });
 });
 
-paginate();
-}
-
-function paginate(){
-let rows=[...document.querySelectorAll("#commandsBody tr")]
-.filter(r=>r.style.display!="none");
-
-let totalPages=Math.ceil(rows.length/rowsPerPage);
-rows.forEach((row,i)=>{
-row.style.display=(i>= (currentPage-1)*rowsPerPage && i<currentPage*rowsPerPage)?"":"none";
+// Commands search
+document.getElementById("searchCommands").addEventListener("keyup", function() {
+    let filter = this.value.toLowerCase();
+    document.querySelectorAll("#commandsTable tbody tr").forEach(row => {
+        row.style.display = row.innerText.toLowerCase().includes(filter) ? "" : "none";
+    });
 });
-
-let pagination=document.getElementById("pagination");
-pagination.innerHTML="";
-for(let i=1;i<=totalPages;i++){
-let btn=document.createElement("button");
-btn.className="action-btn";
-btn.innerText=i;
-btn.onclick=()=>{currentPage=i;paginate();}
-pagination.appendChild(btn);
-}
-}
-
-function sortTable(n){
-let rows=[...document.querySelectorAll("#commandsBody tr")];
-rows.sort((a,b)=>{
-return a.children[n].innerText.localeCompare(b.children[n].innerText);
-});
-rows.forEach(r=>document.getElementById("commandsBody").appendChild(r));
-paginate();
-}
-
-document.getElementById("searchCommands").addEventListener("keyup",()=>{currentPage=1;updateCommands();});
-document.getElementById("filterCategory").addEventListener("change",()=>{currentPage=1;updateCommands();});
-updateCommands();
 </script>
-
 </body>
 </html>

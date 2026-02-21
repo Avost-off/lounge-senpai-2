@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!DOCTYPE html> 
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
@@ -13,80 +13,113 @@
     <div class="flex justify-between items-center mb-6">
         <h1 class="text-3xl font-bold">Dashboard</h1>
         <div>
-            <span class="mr-4">Connecté comme <strong>{{ user['username'] }}</strong></span>
-            <a href="/logout" class="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600">Se déconnecter</a>
+            <span class="mr-4">
+                Connecté comme <strong>{{ user['username'] }}</strong>
+            </span>
+            <a href="/logout" class="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600">
+                Se déconnecter
+            </a>
         </div>
     </div>
 
     <!-- Sélecteur de serveur -->
     <div class="mb-6">
         <form method="get" action="/">
-            <label for="guild_select" class="font-semibold mr-2">Choisir un serveur :</label>
+            <label for="guild_select" class="font-semibold mr-2">
+                Choisir un serveur :
+            </label>
+
             <select id="guild_select" name="guild_id" class="border rounded px-2 py-1">
-                <option value="">Tous les serveurs</option>
+                <option value="">Sélectionner un serveur</option>
+
                 {% for guild in guilds %}
-                    {% if guild['permissions'] & 0x8 %} {# ADMINISTRATOR uniquement #}
-                    <option value="{{ guild['id'] }}" {% if selected_guild == guild['id'] %}selected{% endif %}>
+                    <option value="{{ guild['id'] }}"
+                        {% if selected_guild == guild['id'] %}selected{% endif %}>
                         {{ guild['name'] }}
                     </option>
-                    {% endif %}
                 {% endfor %}
             </select>
-            <button type="submit" class="bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600">Afficher</button>
+
+            <button type="submit"
+                class="bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600">
+                Afficher
+            </button>
         </form>
     </div>
 
-    <!-- Commandes par catégorie -->
-    {% for category, cmds in commands_by_category.items() %}
-    <div class="mb-6">
-        <h2 class="text-xl font-semibold mb-2">{{ category }}</h2>
-        <div class="overflow-x-auto">
-            <table class="w-full bg-white dark:bg-gray-800 rounded shadow overflow-hidden">
-                <thead class="bg-gray-200 dark:bg-gray-700">
-                    <tr>
-                        <th class="px-4 py-2">Nom</th>
-                        <th class="px-4 py-2">Description</th>
-                        <th class="px-4 py-2">État</th>
-                        <th class="px-4 py-2">Action</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for cmd in cmds %}
-                    <tr class="border-b border-gray-200 dark:border-gray-700">
-                        <td class="px-4 py-2">{{ cmd['name'] }}</td>
-                        <td class="px-4 py-2">{{ cmd['description'] }}</td>
-                        <td class="px-4 py-2">{{ 'Activée' if cmd['enabled'] else 'Désactivée' }}</td>
-                        <td class="px-4 py-2">
-                            <button 
-                                class="px-3 py-1 rounded 
-                                {% if cmd['enabled'] %}bg-red-500 hover:bg-red-600{% else %}bg-green-500 hover:bg-green-600{% endif %} text-white"
-                                onclick="executeCommand('{{ cmd['name'] }}')">
-                                Exécuter
-                            </button>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+    <!-- Si aucun serveur sélectionné -->
+    {% if not selected_guild %}
+        <div class="bg-yellow-200 text-yellow-900 p-4 rounded mb-6">
+            Sélectionnez un serveur pour voir les commandes.
         </div>
-    </div>
-    {% endfor %}
+    {% endif %}
+
+    <!-- Commandes par catégorie -->
+    {% if commands_by_category %}
+        {% for category, cmds in commands_by_category.items() %}
+        <div class="mb-6">
+            <h2 class="text-xl font-semibold mb-2">{{ category }}</h2>
+            <div class="overflow-x-auto">
+                <table class="w-full bg-white dark:bg-gray-800 rounded shadow overflow-hidden">
+                    <thead class="bg-gray-200 dark:bg-gray-700">
+                        <tr>
+                            <th class="px-4 py-2">Nom</th>
+                            <th class="px-4 py-2">Description</th>
+                            <th class="px-4 py-2">État</th>
+                            <th class="px-4 py-2">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for cmd in cmds %}
+                        <tr class="border-b border-gray-200 dark:border-gray-700">
+                            <td class="px-4 py-2">{{ cmd['name'] }}</td>
+                            <td class="px-4 py-2">{{ cmd['description'] }}</td>
+                            <td class="px-4 py-2">
+                                {{ 'Activée' if cmd['enabled'] else 'Désactivée' }}
+                            </td>
+                            <td class="px-4 py-2">
+                                <button 
+                                    class="px-3 py-1 rounded text-white
+                                    {% if cmd['enabled'] %}
+                                        bg-red-500 hover:bg-red-600
+                                    {% else %}
+                                        bg-green-500 hover:bg-green-600
+                                    {% endif %}"
+                                    onclick="executeCommand('{{ cmd['name'] }}')">
+                                    Exécuter
+                                </button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endfor %}
+    {% endif %}
 
 </div>
 
 <script>
 async function executeCommand(commandName) {
     const guildId = document.getElementById('guild_select').value;
+
     if (!guildId) {
         alert("Sélectionnez un serveur !");
         return;
     }
+
     const response = await fetch("/execute_command", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ guild_id: guildId, command_name: commandName })
+        body: JSON.stringify({
+            guild_id: guildId,
+            command_name: commandName
+        })
     });
+
     const result = await response.json();
+
     if (result.success) {
         alert(`Commande "${commandName}" exécutée sur le serveur !`);
     } else {
@@ -94,5 +127,6 @@ async function executeCommand(commandName) {
     }
 }
 </script>
+
 </body>
 </html>

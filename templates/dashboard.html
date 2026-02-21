@@ -2,142 +2,122 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
-<title>Dashboard</title>
+<title>Bot Dashboard</title>
 <script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
 <script>
-function toggleDarkMode() {
-    document.documentElement.classList.toggle('dark');
+if (localStorage.getItem("theme") === "dark") {
+    document.documentElement.classList.add("dark");
+}
+
+function toggleTheme() {
+    document.documentElement.classList.toggle("dark");
+    localStorage.setItem(
+        "theme",
+        document.documentElement.classList.contains("dark") ? "dark" : "light"
+    );
+}
+
+function toggleCommand(id, button) {
+    fetch("/toggle_command_ajax", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({command_id: id})
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            if (data.new_state === 1) {
+                button.classList.remove("bg-green-600");
+                button.classList.add("bg-red-600");
+                button.innerText = "Désactiver";
+            } else {
+                button.classList.remove("bg-red-600");
+                button.classList.add("bg-green-600");
+                button.innerText = "Activer";
+            }
+        }
+    });
 }
 </script>
 </head>
 
-<body class="bg-gray-100 text-gray-900 dark:bg-gray-900 dark:text-gray-100 transition duration-300">
+<body class="bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 transition">
 
 <div class="flex min-h-screen">
 
-<!-- SIDEBAR -->
-<div class="w-64 bg-white dark:bg-gray-800 shadow-lg p-4">
+<!-- Sidebar -->
+<div class="w-64 bg-gradient-to-b from-purple-600 to-purple-800 text-white p-6">
+<h2 class="text-2xl font-bold mb-8">⚡ Premium Panel</h2>
 
-<h2 class="text-2xl font-bold mb-6">⚡ Bot Panel</h2>
+<p class="mb-4">👤 {{ user.username }}</p>
 
-<!-- User -->
-<div class="mb-6">
-<p class="font-semibold">👤 {{ user.username }}</p>
-<a href="/logout" class="text-red-600 hover:underline text-sm">Se déconnecter</a>
-</div>
-
-<!-- Dark Mode -->
-<button onclick="toggleDarkMode()" 
-class="mb-6 w-full bg-gray-200 dark:bg-gray-700 px-3 py-2 rounded hover:bg-gray-300 dark:hover:bg-gray-600">
-🌙 Mode sombre
+<button onclick="toggleTheme()" class="mb-6 bg-purple-900 px-3 py-2 rounded w-full">
+🌙 Dark Mode
 </button>
 
-<!-- Serveurs -->
-<h3 class="font-semibold mb-2">Tes serveurs</h3>
-<div class="space-y-2">
+<h3 class="mb-3 font-semibold">Serveurs</h3>
 
 {% for guild in guilds %}
-<a href="/?guild_id={{ guild.id }}" 
-class="flex items-center p-2 rounded hover:bg-gray-200 dark:hover:bg-gray-700
-{% if selected_guild == guild.id %}bg-gray-200 dark:bg-gray-700{% endif %}">
-
-{% if guild.icon %}
-<img src="https://cdn.discordapp.com/icons/{{ guild.id }}/{{ guild.icon }}.png" 
-class="w-8 h-8 rounded-full mr-2">
-{% else %}
-<div class="w-8 h-8 bg-gray-400 rounded-full mr-2"></div>
-{% endif %}
-
-<span>{{ guild.name }}</span>
+<a href="/?guild_id={{ guild.id }}"
+class="block p-2 rounded hover:bg-purple-700
+{% if selected_guild == guild.id %}bg-purple-900{% endif %}">
+{{ guild.name }}
 </a>
 {% endfor %}
 
 </div>
-</div>
 
-<!-- MAIN CONTENT -->
+<!-- Content -->
 <div class="flex-1 p-8">
 
-<h1 class="text-3xl font-bold mb-6">Dashboard</h1>
+<h1 class="text-3xl font-bold mb-8">Dashboard</h1>
 
 {% if selected_guild %}
 
-<!-- Stats -->
-<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-
-<div class="bg-white dark:bg-gray-800 p-4 rounded shadow">
-<p class="text-gray-500 dark:text-gray-400">Balance totale</p>
-<p class="text-2xl font-bold">{{ total_balance }}</p>
+<!-- Graph -->
+<div class="bg-white dark:bg-gray-800 p-6 rounded shadow mb-8">
+<canvas id="statsChart"></canvas>
 </div>
 
-<div class="bg-white dark:bg-gray-800 p-4 rounded shadow">
-<p class="text-gray-500 dark:text-gray-400">Commandes</p>
-<p class="text-2xl font-bold">{{ commands|length }}</p>
-</div>
+<script>
+new Chart(document.getElementById('statsChart'), {
+    type: 'bar',
+    data: {
+        labels: ['Commandes'],
+        datasets: [{
+            label: 'Total',
+            data: [{{ commands|length }}],
+            backgroundColor: 'rgba(139,92,246,0.7)'
+        }]
+    }
+});
+</script>
 
-<div class="bg-white dark:bg-gray-800 p-4 rounded shadow">
-<p class="text-gray-500 dark:text-gray-400">Membres</p>
-<p class="text-2xl font-bold">{{ users|length }}</p>
-</div>
-
-</div>
-
-<!-- Commandes -->
-<div class="bg-white dark:bg-gray-800 rounded shadow p-6">
-
-<h2 class="text-xl font-semibold mb-4">Gestion des commandes</h2>
-
-<table class="w-full">
-<thead class="border-b dark:border-gray-600">
-<tr>
-<th class="p-2 text-left">Nom</th>
-<th class="p-2 text-left">État</th>
-<th class="p-2 text-left">Action</th>
-</tr>
-</thead>
-
-<tbody>
+<!-- Commands -->
+<div class="bg-white dark:bg-gray-800 p-6 rounded shadow">
+<h2 class="text-xl font-semibold mb-4">Commandes</h2>
 
 {% for cmd in commands %}
-<tr class="border-b dark:border-gray-700">
-<td class="p-2">{{ cmd.name }}</td>
-
-<td class="p-2">
+<div class="flex justify-between items-center border-b py-3">
+<span>{{ cmd.name }}</span>
+<button onclick="toggleCommand({{ cmd.id }}, this)"
+class="px-4 py-1 rounded text-white
 {% if cmd.enabled %}
-<span class="text-green-600 font-semibold">Activée</span>
+bg-red-600
 {% else %}
-<span class="text-red-600 font-semibold">Désactivée</span>
-{% endif %}
-</td>
-
-<td class="p-2">
-<form method="post" action="/toggle_command">
-<input type="hidden" name="command_id" value="{{ cmd.id }}">
-<button class="px-3 py-1 rounded text-white
-{% if cmd.enabled %}
-bg-red-600 hover:bg-red-700
-{% else %}
-bg-green-600 hover:bg-green-700
-{% endif %}
-">
-Toggle
+bg-green-600
+{% endif %}">
+{% if cmd.enabled %}Désactiver{% else %}Activer{% endif %}
 </button>
-</form>
-</td>
-</tr>
+</div>
 {% endfor %}
 
-</tbody>
-</table>
-
 </div>
 
 {% else %}
-
-<div class="bg-white dark:bg-gray-800 p-6 rounded shadow">
-Sélectionne un serveur dans la sidebar 👈
-</div>
-
+Sélectionne un serveur 👈
 {% endif %}
 
 </div>

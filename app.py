@@ -1,8 +1,7 @@
 import os
 import sqlite3
 import requests
-import json
-from flask import Flask, render_template, redirect, request, session, flash, url_for
+from flask import Flask, render_template, redirect, request, session, flash
 
 # ==============================
 # APP FLASK
@@ -28,7 +27,7 @@ DISCORD_API_URL = "https://discord.com/api/users/@me"
 DISCORD_GUILDS_URL = "https://discord.com/api/users/@me/guilds"
 
 # ==============================
-# DATABASE UTIL
+# DATABASE
 # ==============================
 def get_db():
     conn = sqlite3.connect(DATABASE, timeout=10)
@@ -37,11 +36,7 @@ def get_db():
 
 def init_db():
     db = get_db()
-    if not db:
-        print("Erreur DB")
-        return
 
-    # Table users multi-serveur
     db.execute("""
     CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -55,7 +50,6 @@ def init_db():
     )
     """)
 
-    # Table commands
     db.execute("""
     CREATE TABLE IF NOT EXISTS commands (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -67,7 +61,6 @@ def init_db():
     )
     """)
 
-    # Table guild_settings
     db.execute("""
     CREATE TABLE IF NOT EXISTS guild_settings (
         guild_id TEXT PRIMARY KEY,
@@ -77,6 +70,9 @@ def init_db():
 
     db.commit()
     db.close()
+
+# ⚠️ IMPORTANT : on initialise la DB au chargement du module
+init_db()
 
 # ==============================
 # LOGIN / OAUTH2
@@ -107,33 +103,38 @@ def callback():
     headers = {"Content-Type": "application/x-www-form-urlencoded"}
     token_resp = requests.post(DISCORD_TOKEN_URL, data=data, headers=headers)
     token_json = token_resp.json()
+
     if "access_token" not in token_json:
         flash("Erreur OAuth : token invalide", "danger")
         return redirect("/login")
 
     access_token = token_json["access_token"]
 
-    # Récupération user
-    user = requests.get(DISCORD_API_URL, headers={"Authorization": f"Bearer {access_token}"}).json()
+    user = requests.get(
+        DISCORD_API_URL,
+        headers={"Authorization": f"Bearer {access_token}"}
+    ).json()
 
-    # Récupération guildes (seulement id, name, permissions pour limiter la taille de session)
-    guilds_resp = requests.get(DISCORD_GUILDS_URL, headers={"Authorization": f"Bearer {access_token}"}).json()
+    guilds_resp = requests.get(
+        DISCORD_GUILDS_URL,
+        headers={"Authorization": f"Bearer {access_token}"}
+    ).json()
+
     guilds_admin = []
     for g in guilds_resp:
-        permissions = g.get("permissions", 0)
-        if permissions & 0x8:  # ADMINISTRATOR
+        permissions = int(g.get("permissions", 0))
+        if permissions & 0x8:
             guilds_admin.append({
                 "id": g["id"],
-                "name": g["name"],
-                "permissions": permissions
+                "name": g["name"]
             })
 
-    session["user"] = {"id": user["id"], "username": user["username"]}
+    session["user"] = {
+        "id": user["id"],
+        "username": user["username"]
+    }
     session["guilds"] = guilds_admin
     session["token"] = access_token
-
-    if not guilds_admin:
-        flash("Tu n'es admin d'aucun serveur Discord.", "warning")
 
     return redirect("/")
 
@@ -153,27 +154,27 @@ def dashboard():
     selected_guild = request.args.get("guild_id")
     db = get_db()
 
-    # Users
     users = []
+    commands = []
+    total_balance = 0
+
     if selected_guild:
         users = db.execute(
             "SELECT * FROM users WHERE guild_id=?",
             (selected_guild,)
         ).fetchall()
 
-    # Commands
-    commands = []
-    if selected_guild:
         commands = db.execute(
             "SELECT * FROM commands WHERE guild_id=?",
             (selected_guild,)
         ).fetchall()
 
-    # Stats
-    total_balance = db.execute(
-        "SELECT SUM(balance) FROM users WHERE guild_id=?",
-        (selected_guild,)
-    ).fetchone()[0] or 0 if selected_guild else 0
+        result = db.execute(
+            "SELECT SUM(balance) FROM users WHERE guild_id=?",
+            (selected_guild,)
+        ).fetchone()
+
+        total_balance = result[0] if result and result[0] else 0
 
     db.close()
 
@@ -197,26 +198,36 @@ def toggle_command_ajax():
 
     data = request.get_json()
     command_id = data.get("command_id")
+
     if not command_id:
         return {"success": False}
 
     db = get_db()
-    cmd = db.execute("SELECT enabled FROM commands WHERE id=?", (command_id,)).fetchone()
+
+    cmd = db.execute(
+        "SELECT enabled FROM commands WHERE id=?",
+        (command_id,)
+    ).fetchone()
+
     if not cmd:
         db.close()
         return {"success": False}
 
     new_state = 0 if cmd["enabled"] else 1
-    db.execute("UPDATE commands SET enabled=? WHERE id=?", (new_state, command_id))
+
+    db.execute(
+        "UPDATE commands SET enabled=? WHERE id=?",
+        (new_state, command_id)
+    )
+
     db.commit()
     db.close()
 
     return {"success": True, "new_state": new_state}
 
 # ==============================
-# INIT & RUN
+# RUN LOCAL ONLY
 # ==============================
 if __name__ == "__main__":
-    init_db()
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port, debug=True)

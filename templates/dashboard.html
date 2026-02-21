@@ -1,149 +1,147 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-    <meta charset="UTF-8">
-    <title>Dashboard</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <!-- Tailwind CSS CDN pour design moderne -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-        /* Cartes */
-        .card { background-color: #ffffff; color: #1f2937; } /* clair */
-        .card-dark { background-color: #1f2937; color: #f3f4f6; } /* sombre */
-        /* Tableaux */
-        .table-header { background-color: #e5e7eb; color: #1f2937; }
-        .table-row { border-bottom: 1px solid #d1d5db; }
-        .table-row-dark { border-bottom: 1px solid #374151; }
-        /* Toggle boutons */
-        .btn-enabled { background-color: #16a34a; } /* vert foncé */
-        .btn-enabled:hover { background-color: #15803d; }
-        .btn-disabled { background-color: #dc2626; } /* rouge foncé */
-        .btn-disabled:hover { background-color: #b91c1c; }
-    </style>
+<meta charset="UTF-8">
+<title>Dashboard</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+function toggleDarkMode() {
+    document.documentElement.classList.toggle('dark');
+}
+</script>
 </head>
-<body class="bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-100 transition-colors">
 
-<div class="container mx-auto p-4">
+<body class="bg-gray-100 text-gray-900 dark:bg-gray-900 dark:text-gray-100 transition duration-300">
 
-    <!-- Header -->
-    <div class="flex justify-between items-center mb-6">
-        <h1 class="text-3xl font-bold">Dashboard</h1>
-        <div>
-            <span class="mr-4">Connecté comme <strong>{{ user['username'] }}</strong></span>
-            <a href="/logout" class="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700">Se déconnecter</a>
-        </div>
-    </div>
+<div class="flex min-h-screen">
 
-    <!-- Sélecteur de serveur -->
-    <div class="mb-6">
-        <form method="get" action="/">
-            <label for="guild_select" class="font-semibold mr-2">Choisir un serveur :</label>
-            <select id="guild_select" name="guild_id" class="border rounded px-2 py-1">
-                <option value="">Tous les serveurs</option>
-                {% for guild in guilds %}
-                    {% if guild['permissions'] & 0x8 %} {# 0x8 = ADMINISTRATOR #}
-                    <option value="{{ guild['id'] }}" {% if selected_guild == guild['id'] %}selected{% endif %}>
-                        {{ guild['name'] }}
-                    </option>
-                    {% endif %}
-                {% endfor %}
-            </select>
-            <button type="submit" class="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700">Afficher</button>
-        </form>
-    </div>
+<!-- SIDEBAR -->
+<div class="w-64 bg-white dark:bg-gray-800 shadow-lg p-4">
 
-    <!-- Stats -->
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-        <div class="card dark:card-dark p-4 rounded shadow">
-            <h2 class="font-semibold">Balance totale</h2>
-            <p class="text-2xl font-bold">{{ total_balance }} 💰</p>
-        </div>
-        <div class="card dark:card-dark p-4 rounded shadow">
-            <h2 class="font-semibold">Membres en prison</h2>
-            <p class="text-2xl font-bold">{{ prison_count }}</p>
-        </div>
-        <div class="card dark:card-dark p-4 rounded shadow">
-            <h2 class="font-semibold">Mariages</h2>
-            <p class="text-2xl font-bold">{{ marriages_count }}</p>
-        </div>
-    </div>
+<h2 class="text-2xl font-bold mb-6">⚡ Bot Panel</h2>
 
-    <!-- Membres -->
-    <div class="mb-6">
-        <h2 class="text-xl font-semibold mb-2">Membres</h2>
-        <form method="get" action="/" class="mb-2 flex gap-2">
-            <input type="hidden" name="guild_id" value="{{ selected_guild }}">
-            <input type="text" name="search_user" placeholder="Rechercher un membre" class="border rounded px-2 py-1 flex-1">
-            <button type="submit" class="bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700">Rechercher</button>
-        </form>
-        <div class="overflow-x-auto">
-            <table class="w-full rounded shadow overflow-hidden">
-                <thead class="table-header dark:bg-gray-700 dark:text-gray-100">
-                    <tr>
-                        <th class="px-4 py-2">ID</th>
-                        <th class="px-4 py-2">Nom</th>
-                        <th class="px-4 py-2">XP</th>
-                        <th class="px-4 py-2">Level</th>
-                        <th class="px-4 py-2">Balance</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for user in users %}
-                    <tr class="table-row dark:table-row-dark">
-                        <td class="px-4 py-2">{{ user['user_id'] }}</td>
-                        <td class="px-4 py-2">{{ user['username'] }}</td>
-                        <td class="px-4 py-2">{{ user['xp'] }}</td>
-                        <td class="px-4 py-2">{{ user['level'] }}</td>
-                        <td class="px-4 py-2">{{ user['balance'] }}</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-    </div>
+<!-- User -->
+<div class="mb-6">
+<p class="font-semibold">👤 {{ user.username }}</p>
+<a href="/logout" class="text-red-600 hover:underline text-sm">Se déconnecter</a>
+</div>
 
-    <!-- Commandes -->
-    <div class="mb-6">
-        <h2 class="text-xl font-semibold mb-2">Commandes</h2>
-        <form method="get" action="/" class="mb-2 flex gap-2">
-            <input type="hidden" name="guild_id" value="{{ selected_guild }}">
-            <input type="text" name="search_cmd" placeholder="Rechercher une commande" class="border rounded px-2 py-1 flex-1">
-            <button type="submit" class="bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700">Rechercher</button>
-        </form>
-        <div class="overflow-x-auto">
-            <table class="w-full rounded shadow overflow-hidden">
-                <thead class="table-header dark:bg-gray-700 dark:text-gray-100">
-                    <tr>
-                        <th class="px-4 py-2">Nom</th>
-                        <th class="px-4 py-2">Catégorie</th>
-                        <th class="px-4 py-2">Description</th>
-                        <th class="px-4 py-2">État</th>
-                        <th class="px-4 py-2">Action</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for cmd in commands %}
-                    <tr class="table-row dark:table-row-dark">
-                        <td class="px-4 py-2">{{ cmd['name'] }}</td>
-                        <td class="px-4 py-2">{{ cmd['category'] }}</td>
-                        <td class="px-4 py-2">{{ cmd['description'] }}</td>
-                        <td class="px-4 py-2">{{ 'Activée' if cmd['enabled'] else 'Désactivée' }}</td>
-                        <td class="px-4 py-2">
-                            <form method="post" action="/toggle_command">
-                                <input type="hidden" name="command_id" value="{{ cmd['id'] }}">
-                                <button type="submit" class="px-3 py-1 rounded 
-                                    {% if cmd['enabled'] %}btn-disabled text-white{% else %}btn-enabled text-white{% endif %}">
-                                    {% if cmd['enabled'] %}Désactiver{% else %}Activer{% endif %}
-                                </button>
-                            </form>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-    </div>
+<!-- Dark Mode -->
+<button onclick="toggleDarkMode()" 
+class="mb-6 w-full bg-gray-200 dark:bg-gray-700 px-3 py-2 rounded hover:bg-gray-300 dark:hover:bg-gray-600">
+🌙 Mode sombre
+</button>
+
+<!-- Serveurs -->
+<h3 class="font-semibold mb-2">Tes serveurs</h3>
+<div class="space-y-2">
+
+{% for guild in guilds %}
+<a href="/?guild_id={{ guild.id }}" 
+class="flex items-center p-2 rounded hover:bg-gray-200 dark:hover:bg-gray-700
+{% if selected_guild == guild.id %}bg-gray-200 dark:bg-gray-700{% endif %}">
+
+{% if guild.icon %}
+<img src="https://cdn.discordapp.com/icons/{{ guild.id }}/{{ guild.icon }}.png" 
+class="w-8 h-8 rounded-full mr-2">
+{% else %}
+<div class="w-8 h-8 bg-gray-400 rounded-full mr-2"></div>
+{% endif %}
+
+<span>{{ guild.name }}</span>
+</a>
+{% endfor %}
 
 </div>
+</div>
+
+<!-- MAIN CONTENT -->
+<div class="flex-1 p-8">
+
+<h1 class="text-3xl font-bold mb-6">Dashboard</h1>
+
+{% if selected_guild %}
+
+<!-- Stats -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+
+<div class="bg-white dark:bg-gray-800 p-4 rounded shadow">
+<p class="text-gray-500 dark:text-gray-400">Balance totale</p>
+<p class="text-2xl font-bold">{{ total_balance }}</p>
+</div>
+
+<div class="bg-white dark:bg-gray-800 p-4 rounded shadow">
+<p class="text-gray-500 dark:text-gray-400">Commandes</p>
+<p class="text-2xl font-bold">{{ commands|length }}</p>
+</div>
+
+<div class="bg-white dark:bg-gray-800 p-4 rounded shadow">
+<p class="text-gray-500 dark:text-gray-400">Membres</p>
+<p class="text-2xl font-bold">{{ users|length }}</p>
+</div>
+
+</div>
+
+<!-- Commandes -->
+<div class="bg-white dark:bg-gray-800 rounded shadow p-6">
+
+<h2 class="text-xl font-semibold mb-4">Gestion des commandes</h2>
+
+<table class="w-full">
+<thead class="border-b dark:border-gray-600">
+<tr>
+<th class="p-2 text-left">Nom</th>
+<th class="p-2 text-left">État</th>
+<th class="p-2 text-left">Action</th>
+</tr>
+</thead>
+
+<tbody>
+
+{% for cmd in commands %}
+<tr class="border-b dark:border-gray-700">
+<td class="p-2">{{ cmd.name }}</td>
+
+<td class="p-2">
+{% if cmd.enabled %}
+<span class="text-green-600 font-semibold">Activée</span>
+{% else %}
+<span class="text-red-600 font-semibold">Désactivée</span>
+{% endif %}
+</td>
+
+<td class="p-2">
+<form method="post" action="/toggle_command">
+<input type="hidden" name="command_id" value="{{ cmd.id }}">
+<button class="px-3 py-1 rounded text-white
+{% if cmd.enabled %}
+bg-red-600 hover:bg-red-700
+{% else %}
+bg-green-600 hover:bg-green-700
+{% endif %}
+">
+Toggle
+</button>
+</form>
+</td>
+</tr>
+{% endfor %}
+
+</tbody>
+</table>
+
+</div>
+
+{% else %}
+
+<div class="bg-white dark:bg-gray-800 p-6 rounded shadow">
+Sélectionne un serveur dans la sidebar 👈
+</div>
+
+{% endif %}
+
+</div>
+</div>
+
 </body>
 </html>

@@ -1,127 +1,152 @@
-<!DOCTYPE html>
-<html lang="fr">
-<head>
-<meta charset="UTF-8">
-<title>Bot Dashboard</title>
-<script src="https://cdn.tailwindcss.com"></script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+# dashboard.py
+import os
+import json
+from flask import Flask, render_template, request, session, jsonify, redirect
+import requests
+from utils.database import DatabaseManager, db  # ton DatabaseManager existant
 
-<script>
-if (localStorage.getItem("theme") === "dark") {
-    document.documentElement.classList.add("dark");
-}
+app = Flask(__name__)
+app.secret_key = os.environ.get("SESSION_SECRET", "CHANGE_THIS_SECRET_KEY")
 
-function toggleTheme() {
-    document.documentElement.classList.toggle("dark");
-    localStorage.setItem(
-        "theme",
-        document.documentElement.classList.contains("dark") ? "dark" : "light"
-    );
-}
+# ==============================
+# DISCORD OAUTH CONFIG
+# ==============================
+CLIENT_ID = os.environ.get("CLIENT_ID")
+CLIENT_SECRET = os.environ.get("CLIENT_SECRET")
+REDIRECT_URI = os.environ.get("REDIRECT_URI", "http://localhost:5000/callback")
 
-function toggleCommand(id, button) {
-    fetch("/toggle_command_ajax", {
-        method: "POST",
-        headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({command_id: id})
-    })
-    .then(res => res.json())
-    .then(data => {
-        if (data.success) {
-            if (data.new_state === 1) {
-                button.classList.remove("bg-green-600");
-                button.classList.add("bg-red-600");
-                button.innerText = "Désactiver";
-            } else {
-                button.classList.remove("bg-red-600");
-                button.classList.add("bg-green-600");
-                button.innerText = "Activer";
-            }
-        }
-    });
-}
-</script>
-</head>
+DISCORD_AUTH_URL = "https://discord.com/api/oauth2/authorize"
+DISCORD_TOKEN_URL = "https://discord.com/api/oauth2/token"
+DISCORD_API_URL = "https://discord.com/api/users/@me"
+DISCORD_GUILDS_URL = "https://discord.com/api/users/@me/guilds"
 
-<body class="bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 transition">
+# ==============================
+# LOGIN
+# ==============================
+@app.route("/login")
+def login():
+    return redirect(
+        f"{DISCORD_AUTH_URL}?client_id={CLIENT_ID}"
+        f"&redirect_uri={REDIRECT_URI}"
+        f"&response_type=code&scope=identify%20guilds"
+    )
 
-<div class="flex min-h-screen">
+@app.route("/callback")
+def callback():
+    code = request.args.get("code")
+    if not code:
+        return "Erreur OAuth : code manquant"
 
-<!-- Sidebar -->
-<div class="w-64 bg-gradient-to-b from-purple-600 to-purple-800 text-white p-6">
-<h2 class="text-2xl font-bold mb-8">⚡ Premium Panel</h2>
-
-<p class="mb-4">👤 {{ user.username }}</p>
-
-<button onclick="toggleTheme()" class="mb-6 bg-purple-900 px-3 py-2 rounded w-full">
-🌙 Dark Mode
-</button>
-
-<h3 class="mb-3 font-semibold">Serveurs</h3>
-
-{% for guild in guilds %}
-<a href="/?guild_id={{ guild.id }}"
-class="block p-2 rounded hover:bg-purple-700
-{% if selected_guild == guild.id %}bg-purple-900{% endif %}">
-{{ guild.name }}
-</a>
-{% endfor %}
-
-</div>
-
-<!-- Content -->
-<div class="flex-1 p-8">
-
-<h1 class="text-3xl font-bold mb-8">Dashboard</h1>
-
-{% if selected_guild %}
-
-<!-- Graph -->
-<div class="bg-white dark:bg-gray-800 p-6 rounded shadow mb-8">
-<canvas id="statsChart"></canvas>
-</div>
-
-<script>
-new Chart(document.getElementById('statsChart'), {
-    type: 'bar',
-    data: {
-        labels: ['Commandes'],
-        datasets: [{
-            label: 'Total',
-            data: [{{ commands|length }}],
-            backgroundColor: 'rgba(139,92,246,0.7)'
-        }]
+    data = {
+        "client_id": CLIENT_ID,
+        "client_secret": CLIENT_SECRET,
+        "grant_type": "authorization_code",
+        "code": code,
+        "redirect_uri": REDIRECT_URI,
     }
-});
-</script>
+    headers = {"Content-Type": "application/x-www-form-urlencoded"}
+    token_resp = requests.post(DISCORD_TOKEN_URL, data=data, headers=headers)
+    token_json = token_resp.json()
+    if "access_token" not in token_json:
+        return "Erreur OAuth : token invalide"
 
-<!-- Commands -->
-<div class="bg-white dark:bg-gray-800 p-6 rounded shadow">
-<h2 class="text-xl font-semibold mb-4">Commandes</h2>
+    access_token = token_json["access_token"]
+    user = requests.get(DISCORD_API_URL, headers={"Authorization": f"Bearer {access_token}"}).json()
+    guilds = requests.get(DISCORD_GUILDS_URL, headers={"Authorization": f"Bearer {access_token}"}).json()
 
-{% for cmd in commands %}
-<div class="flex justify-between items-center border-b py-3">
-<span>{{ cmd.name }}</span>
-<button onclick="toggleCommand({{ cmd.id }}, this)"
-class="px-4 py-1 rounded text-white
-{% if cmd.enabled %}
-bg-red-600
-{% else %}
-bg-green-600
-{% endif %}">
-{% if cmd.enabled %}Désactiver{% else %}Activer{% endif %}
-</button>
-</div>
-{% endfor %}
+    session["user"] = user
+    session["guilds"] = guilds
+    session["token"] = access_token
 
-</div>
+    return redirect("/")
 
-{% else %}
-Sélectionne un serveur 👈
-{% endif %}
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect("/login")
 
-</div>
-</div>
+# ==============================
+# DASHBOARD
+# ==============================
+@app.route("/")
+async def dashboard():
+    if "user" not in session:
+        return redirect("/login")
 
-</body>
-</html>
+    selected_guild = request.args.get("guild_id")
+    guilds = session.get("guilds", [])
+
+    # Filtrer seulement serveurs où utilisateur est admin
+    admin_guilds = [g for g in guilds if g.get("permissions", 0) & 0x8]
+
+    commands = []
+    if selected_guild:
+        commands = await db.fetch_all("SELECT * FROM commands WHERE 1=1")  # Toutes les commandes
+        # grouper par catégorie
+        commands_by_category = {}
+        for cmd in commands:
+            cat = cmd.get("category") or "Autres"
+            if cat not in commands_by_category:
+                commands_by_category[cat] = []
+            commands_by_category[cat].append(cmd)
+    else:
+        commands_by_category = {}
+
+    return render_template(
+        "dashboard.html",
+        user=session["user"],
+        guilds=admin_guilds,
+        selected_guild=selected_guild,
+        commands=commands,
+        commands_by_category=commands_by_category
+    )
+
+# ==============================
+# AJAX TOGGLE COMMAND
+# ==============================
+@app.route("/toggle_command_ajax", methods=["POST"])
+async def toggle_command_ajax():
+    data = request.get_json()
+    command_id = data.get("command_id")
+    if not command_id:
+        return jsonify({"success": False, "error": "ID commande manquant"})
+
+    cmd = await db.fetch_one("SELECT * FROM commands WHERE id=?", (command_id,))
+    if not cmd:
+        return jsonify({"success": False, "error": "Commande non trouvée"})
+
+    new_state = 0 if cmd["enabled"] else 1
+    await db.toggle_command(command_id, new_state)
+
+    return jsonify({"success": True, "new_state": new_state})
+
+# ==============================
+# EXECUTE COMMAND (simulé)
+# ==============================
+@app.route("/execute_command", methods=["POST"])
+async def execute_command():
+    data = request.get_json()
+    guild_id = data.get("guild_id")
+    command_name = data.get("command_name")
+
+    if not guild_id or not command_name:
+        return jsonify({"success": False, "error": "Paramètres manquants"})
+
+    # Ici tu dois appeler ton bot Discord pour exécuter la commande sur le serveur
+    # Exemple simplifié :
+    print(f"Exécution de la commande {command_name} sur le serveur {guild_id}")
+
+    return jsonify({"success": True})
+
+# ==============================
+# INIT DB
+# ==============================
+import asyncio
+asyncio.run(db.connect())
+asyncio.run(db.initialize_tables())
+
+# ==============================
+# RUN
+# ==============================
+if __name__ == "__main__":
+    app.run(debug=True)

@@ -1,18 +1,16 @@
 import os
 import sqlite3
 import json
-from flask import Flask, render_template, request, redirect, session, url_for, jsonify
 import requests
+from flask import Flask, render_template, redirect, request, session, url_for
 
 # ==============================
-# CONFIG FLASK
+# APP FLASK
 # ==============================
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 app = Flask(__name__, template_folder=os.path.join(BASE_DIR, "templates"))
 app.secret_key = os.environ.get("SESSION_SECRET", "CHANGE_THIS_SECRET_KEY")
-
-DATA_DIR = os.path.join(BASE_DIR, "data")
-DB_PATH = os.path.join(DATA_DIR, "database.db")
+DATABASE = os.path.join(BASE_DIR, "database.db")
 
 # ==============================
 # DISCORD OAUTH CONFIG
@@ -21,81 +19,83 @@ CLIENT_ID = os.environ.get("CLIENT_ID")
 CLIENT_SECRET = os.environ.get("CLIENT_SECRET")
 REDIRECT_URI = os.environ.get("REDIRECT_URI")
 
+if not CLIENT_ID or not CLIENT_SECRET or not REDIRECT_URI:
+    raise RuntimeError("Variables OAuth manquantes !")
+
 DISCORD_AUTH_URL = "https://discord.com/api/oauth2/authorize"
 DISCORD_TOKEN_URL = "https://discord.com/api/oauth2/token"
 DISCORD_API_URL = "https://discord.com/api/users/@me"
 DISCORD_GUILDS_URL = "https://discord.com/api/users/@me/guilds"
 
 # ==============================
-# DATABASE UTILS
+# DATABASE FUNCTIONS
 # ==============================
 def get_db():
-    os.makedirs(DATA_DIR, exist_ok=True)
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DATABASE, timeout=10)
     conn.row_factory = sqlite3.Row
     return conn
 
 def init_db():
     db = get_db()
-    db.executescript("""
-    CREATE TABLE IF NOT EXISTS users (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        guild_id TEXT,
-        user_id TEXT,
-        username TEXT,
-        xp INTEGER DEFAULT 0,
-        level INTEGER DEFAULT 1,
-        balance INTEGER DEFAULT 0,
-        in_prison INTEGER DEFAULT 0,
-        UNIQUE(guild_id, user_id)
-    );
-
-    CREATE TABLE IF NOT EXISTS commands (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        guild_id TEXT,
-        name TEXT NOT NULL,
-        category TEXT,
-        description TEXT,
-        enabled INTEGER DEFAULT 1,
-        required_role TEXT DEFAULT 'member'
-    );
-
-    CREATE TABLE IF NOT EXISTS marriages (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        guild_id TEXT,
-        user1 TEXT,
-        user2 TEXT,
-        marriage_timestamp TEXT,
-        UNIQUE(guild_id, user1, user2)
-    );
-
-    CREATE TABLE IF NOT EXISTS prison (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        guild_id TEXT,
-        user_id TEXT,
-        prison_channel_id TEXT,
-        moderator_id TEXT,
-        reason TEXT,
-        timestamp TEXT,
-        saved_roles TEXT
-    );
-
-    CREATE TABLE IF NOT EXISTS guild_settings (
-        guild_id TEXT PRIMARY KEY,
-        leveling_config TEXT DEFAULT '{"enabled": true}'
-    );
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            guild_id TEXT,
+            user_id TEXT,
+            username TEXT,
+            xp INTEGER DEFAULT 0,
+            level INTEGER DEFAULT 1,
+            balance INTEGER DEFAULT 0,
+            in_prison INTEGER DEFAULT 0,
+            UNIQUE(guild_id, user_id)
+        )
+    """)
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS commands (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            guild_id TEXT,
+            name TEXT,
+            category TEXT,
+            description TEXT,
+            enabled INTEGER DEFAULT 1,
+            required_role TEXT DEFAULT 'member'
+        )
+    """)
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS marriages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            guild_id TEXT,
+            user1 TEXT,
+            user2 TEXT,
+            marriage_timestamp TEXT,
+            UNIQUE(guild_id, user1, user2)
+        )
+    """)
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS prison (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            guild_id TEXT,
+            user_id TEXT,
+            prison_channel_id TEXT,
+            moderator_id TEXT,
+            reason TEXT,
+            timestamp TEXT,
+            saved_roles TEXT
+        )
     """)
     db.commit()
     db.close()
-    print("✅ Base de données initialisée avec succès !")
+    print("✅ Database initialized")
 
 # ==============================
-# OAUTH DISCORD
+# LOGIN / OAUTH
 # ==============================
 @app.route("/login")
 def login():
     return redirect(
-        f"{DISCORD_AUTH_URL}?client_id={CLIENT_ID}&redirect_uri={REDIRECT_URI}&response_type=code&scope=identify%20guilds"
+        f"{DISCORD_AUTH_URL}?client_id={CLIENT_ID}"
+        f"&redirect_uri={REDIRECT_URI}"
+        f"&response_type=code&scope=identify%20guilds"
     )
 
 @app.route("/callback")
@@ -114,23 +114,19 @@ def callback():
     headers = {"Content-Type": "application/x-www-form-urlencoded"}
     token_resp = requests.post(DISCORD_TOKEN_URL, data=data, headers=headers)
     token_json = token_resp.json()
-
     if "access_token" not in token_json:
         return redirect("/login")
-
     access_token = token_json["access_token"]
 
-    # Récupération user + guilds
     user = requests.get(DISCORD_API_URL, headers={"Authorization": f"Bearer {access_token}"}).json()
     guilds = requests.get(DISCORD_GUILDS_URL, headers={"Authorization": f"Bearer {access_token}"}).json()
 
-    # On ne garde que les guilds où l'utilisateur est admin
-    admin_guilds = [g for g in guilds if int(g.get("permissions", 0)) & 0x8]
-
-    session["user"] = user
-    session["guilds"] = admin_guilds
-    session["token"] = access_token
-
+    # Garde uniquement les guildes où l'utilisateur est admin (permissions 0x8)
+    session["guilds"] = [
+        {"id": g["id"], "name": g["name"], "permissions": g.get("permissions", 0)}
+        for g in guilds if int(g.get("permissions", 0)) & 0x8
+    ]
+    session["user"] = {"id": user["id"], "username": user["username"]}
     return redirect("/")
 
 @app.route("/logout")
@@ -143,63 +139,56 @@ def logout():
 # ==============================
 @app.route("/")
 def dashboard():
-    if "user" not in session:
-        return redirect("/login")
+    try:
+        if "user" not in session:
+            return redirect("/login")
 
-    guild_id = request.args.get("guild_id")
-    search_user = request.args.get("search_user", "")
-    search_cmd = request.args.get("search_cmd", "")
+        db = get_db()
+        selected_guild = request.args.get("guild_id")
 
-    db = get_db()
+        # Utilisateurs
+        if selected_guild:
+            users = db.execute("SELECT * FROM users WHERE guild_id=? LIMIT 50", (selected_guild,)).fetchall()
+            commands = db.execute("SELECT * FROM commands WHERE guild_id=?", (selected_guild,)).fetchall()
+        else:
+            users = []
+            commands = []
 
-    # Utilisateurs
-    if guild_id:
-        users_query = "SELECT * FROM users WHERE guild_id=?"
-        users_params = [guild_id]
-        if search_user:
-            users_query += " AND (user_id LIKE ? OR LOWER(username) LIKE LOWER(?))"
-            users_params += [f"%{search_user}%", f"%{search_user}%"]
-        users = db.execute(users_query, users_params).fetchall()
-    else:
-        users = []
+        # Stats
+        total_balance = sum([u["balance"] for u in users]) if users else 0
+        prison_count = db.execute("SELECT COUNT(*) FROM prison WHERE guild_id=?", (selected_guild,)).fetchone()[0] if selected_guild else 0
+        marriages_count = db.execute("SELECT COUNT(*) FROM marriages WHERE guild_id=?", (selected_guild,)).fetchone()[0] if selected_guild else 0
 
-    # Commandes
-    if guild_id:
-        cmd_query = "SELECT * FROM commands WHERE guild_id=?"
-        cmd_params = [guild_id]
-        if search_cmd:
-            cmd_query += " AND (name LIKE ? OR category LIKE ? OR description LIKE ?)"
-            cmd_params += [f"%{search_cmd}%"]*3
-        commands = db.execute(cmd_query, cmd_params).fetchall()
-    else:
-        commands = []
+        db.close()
+        return render_template(
+            "dashboard.html",
+            user=session["user"],
+            guilds=session.get("guilds", []),
+            selected_guild=selected_guild,
+            users=users,
+            commands=commands,
+            total_balance=total_balance,
+            prison_count=prison_count,
+            marriages_count=marriages_count
+        )
 
-    # Stats
-    total_balance = db.execute("SELECT SUM(balance) FROM users").fetchone()[0] or 0
-    prison_count = db.execute("SELECT COUNT(*) FROM prison").fetchone()[0]
-    marriages_count = db.execute("SELECT COUNT(*) FROM marriages").fetchone()[0]
-
-    db.close()
-
-    return render_template(
-        "dashboard.html",
-        users=users,
-        commands=commands,
-        total_balance=total_balance,
-        prison_count=prison_count,
-        marriages_count=marriages_count,
-        user=session["user"],
-        guilds=session.get("guilds", []),
-        selected_guild=guild_id
-    )
+    except Exception as e:
+        import traceback
+        return f"<pre>{traceback.format_exc()}</pre>"
 
 # ==============================
-# Toggle Command AJAX
+# TOGGLE COMMAND (AJAX)
 # ==============================
 @app.route("/toggle_command_ajax", methods=["POST"])
 def toggle_command_ajax():
+    if "user" not in session:
+        return {"success": False, "error": "Not logged in"}
+
     data = request.get_json()
     command_id = data.get("command_id")
+    if not command_id:
+        return {"success": False, "error": "Missing command_id"}
+
     db = get_db()
     cmd = db.execute("SELECT enabled FROM commands WHERE id=?", (command_id,)).fetchone()
     if cmd:
@@ -207,12 +196,12 @@ def toggle_command_ajax():
         db.execute("UPDATE commands SET enabled=? WHERE id=?", (new_state, command_id))
         db.commit()
         db.close()
-        return jsonify({"success": True, "new_state": new_state})
+        return {"success": True, "new_state": new_state}
     db.close()
-    return jsonify({"success": False})
+    return {"success": False, "error": "Command not found"}
 
 # ==============================
-# START
+# START APP
 # ==============================
 if __name__ == "__main__":
     init_db()

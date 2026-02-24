@@ -1,132 +1,252 @@
-<!DOCTYPE html> 
-<html lang="fr">
-<head>
-    <meta charset="UTF-8">
-    <title>Dashboard</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <script src="https://cdn.tailwindcss.com"></script>
-</head>
-<body class="bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 transition-colors">
-<div class="container mx-auto p-4">
+{% extends "layout.html" %}
+{% block title %}NEXBOT — Dashboard{% endblock %}
+{% block content %}
 
-    <!-- Header -->
-    <div class="flex justify-between items-center mb-6">
-        <h1 class="text-3xl font-bold">Dashboard</h1>
-        <div>
-            <span class="mr-4">
-                Connecté comme <strong>{{ user['username'] }}</strong>
-            </span>
-            <a href="/logout" class="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600">
-                Se déconnecter
-            </a>
-        </div>
+<style>
+    /* ── HEADER ──────────────────────────────────────────────────── */
+    .dash-header {
+        display: flex;
+        align-items: center;
+        gap: 1.5rem;
+        padding: 2.5rem 0 2rem;
+        border-bottom: 1px solid var(--border);
+        margin-bottom: 2.5rem;
+    }
+
+    .avatar-wrap {
+        position: relative;
+        flex-shrink: 0;
+    }
+
+    .user-avatar {
+        width: 58px; height: 58px;
+        border-radius: 0;
+        display: block;
+        object-fit: cover;
+        clip-path: polygon(8px 0%, 100% 0%, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0% 100%, 0% 8px);
+        border: 1px solid var(--border);
+        filter: grayscale(20%);
+    }
+
+    .avatar-glow {
+        position: absolute;
+        inset: -4px;
+        border: 1px solid rgba(0,245,255,.2);
+        clip-path: polygon(8px 0%, 100% 0%, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0% 100%, 0% 8px);
+        pointer-events: none;
+    }
+
+    .dash-header-text h1 {
+        font-family: var(--font-head);
+        font-size: 1.4rem;
+        font-weight: 900;
+        color: #fff;
+        text-transform: uppercase;
+        letter-spacing: .05em;
+        line-height: 1.1;
+    }
+
+    .dash-header-text p {
+        font-family: var(--font-mono);
+        font-size: .7rem;
+        color: var(--muted);
+        font-weight: 300;
+        margin-top: .4rem;
+        letter-spacing: .06em;
+    }
+
+    /* ── GUILDS ──────────────────────────────────────────────────── */
+    .guilds-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+        gap: 2px;
+        background: var(--border);
+        border: 1px solid var(--border);
+    }
+
+    .guild-card {
+        background: var(--card);
+        padding: 1.1rem 1.25rem;
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        text-decoration: none;
+        color: var(--text);
+        transition: background .15s;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .guild-card::before {
+        content: '';
+        position: absolute;
+        left: 0; top: 0; bottom: 0;
+        width: 2px;
+        background: var(--cyan);
+        transform: scaleY(0);
+        transform-origin: bottom;
+        transition: transform .2s;
+        box-shadow: 0 0 8px var(--cyan);
+    }
+
+    .guild-card:hover { background: var(--surface); color: var(--text); text-decoration: none; }
+    .guild-card:hover::before { transform: scaleY(1); }
+
+    .guild-icon-img {
+        width: 44px; height: 44px;
+        flex-shrink: 0;
+        object-fit: cover;
+        clip-path: polygon(6px 0%, 100% 0%, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0% 100%, 0% 6px);
+        border: 1px solid var(--border);
+    }
+
+    .guild-icon-placeholder {
+        width: 44px; height: 44px;
+        flex-shrink: 0;
+        background: var(--bg2);
+        border: 1px solid var(--border);
+        clip-path: polygon(6px 0%, 100% 0%, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0% 100%, 0% 6px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-family: var(--font-head);
+        font-weight: 900;
+        font-size: 1.1rem;
+        color: var(--cyan);
+    }
+
+    .guild-info { flex: 1; min-width: 0; }
+
+    .guild-name {
+        font-family: var(--font-mono);
+        font-size: .8rem;
+        font-weight: 700;
+        color: #fff;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        letter-spacing: .04em;
+    }
+
+    .guild-role {
+        display: inline-flex;
+        align-items: center;
+        gap: .3rem;
+        font-family: var(--font-mono);
+        font-size: .58rem;
+        font-weight: 700;
+        letter-spacing: .1em;
+        text-transform: uppercase;
+        color: var(--green);
+        margin-top: .3rem;
+    }
+
+    .guild-role::before {
+        content: '';
+        width: 5px; height: 5px;
+        border-radius: 50%;
+        background: var(--green);
+        box-shadow: 0 0 6px var(--green);
+        flex-shrink: 0;
+    }
+
+    .guild-arrow {
+        flex-shrink: 0;
+        color: var(--muted);
+        opacity: 0;
+        transform: translateX(-4px);
+        transition: opacity .15s, transform .15s;
+    }
+
+    .guild-card:hover .guild-arrow { opacity: 1; transform: translateX(0); color: var(--cyan); }
+
+    /* ── EMPTY ───────────────────────────────────────────────────── */
+    .no-guilds {
+        border: 1px solid var(--border);
+        background: var(--card);
+        padding: 5rem 2rem;
+        text-align: center;
+    }
+
+    .no-guilds svg {
+        color: var(--muted);
+        opacity: .25;
+        margin: 0 auto 1.5rem;
+        display: block;
+    }
+
+    .no-guilds h3 {
+        font-family: var(--font-head);
+        font-size: .8rem;
+        font-weight: 700;
+        color: var(--text);
+        text-transform: uppercase;
+        letter-spacing: .15em;
+        margin-bottom: .6rem;
+    }
+
+    .no-guilds p {
+        font-family: var(--font-mono);
+        font-size: .72rem;
+        color: var(--muted);
+        font-weight: 300;
+        line-height: 1.7;
+        max-width: 320px;
+        margin: 0 auto;
+    }
+</style>
+
+<!-- HEADER -->
+<div class="dash-header">
+    <div class="avatar-wrap">
+        <img
+            src="https://cdn.discordapp.com/avatars/{{ user.id }}/{{ user.avatar }}.png"
+            alt="{{ user.username }}"
+            class="user-avatar"
+            onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'">
+        <div class="avatar-glow"></div>
     </div>
-
-    <!-- Sélecteur de serveur -->
-    <div class="mb-6">
-        <form method="get" action="/">
-            <label for="guild_select" class="font-semibold mr-2">
-                Choisir un serveur :
-            </label>
-
-            <select id="guild_select" name="guild_id" class="border rounded px-2 py-1">
-                <option value="">Sélectionner un serveur</option>
-
-                {% for guild in guilds %}
-                    <option value="{{ guild['id'] }}"
-                        {% if selected_guild == guild['id'] %}selected{% endif %}>
-                        {{ guild['name'] }}
-                    </option>
-                {% endfor %}
-            </select>
-
-            <button type="submit"
-                class="bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600">
-                Afficher
-            </button>
-        </form>
+    <div class="dash-header-text">
+        <h1>{{ user.username }}</h1>
+        <p>Sélectionnez un serveur à gérer</p>
     </div>
-
-    <!-- Si aucun serveur sélectionné -->
-    {% if not selected_guild %}
-        <div class="bg-yellow-200 text-yellow-900 p-4 rounded mb-6">
-            Sélectionnez un serveur pour voir les commandes.
-        </div>
-    {% endif %}
-
-    <!-- Commandes par catégorie -->
-    {% if commands_by_category %}
-        {% for category, cmds in commands_by_category.items() %}
-        <div class="mb-6">
-            <h2 class="text-xl font-semibold mb-2">{{ category }}</h2>
-            <div class="overflow-x-auto">
-                <table class="w-full bg-white dark:bg-gray-800 rounded shadow overflow-hidden">
-                    <thead class="bg-gray-200 dark:bg-gray-700">
-                        <tr>
-                            <th class="px-4 py-2">Nom</th>
-                            <th class="px-4 py-2">Description</th>
-                            <th class="px-4 py-2">État</th>
-                            <th class="px-4 py-2">Action</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for cmd in cmds %}
-                        <tr class="border-b border-gray-200 dark:border-gray-700">
-                            <td class="px-4 py-2">{{ cmd['name'] }}</td>
-                            <td class="px-4 py-2">{{ cmd['description'] }}</td>
-                            <td class="px-4 py-2">
-                                {{ 'Activée' if cmd['enabled'] else 'Désactivée' }}
-                            </td>
-                            <td class="px-4 py-2">
-                                <button 
-                                    class="px-3 py-1 rounded text-white
-                                    {% if cmd['enabled'] %}
-                                        bg-red-500 hover:bg-red-600
-                                    {% else %}
-                                        bg-green-500 hover:bg-green-600
-                                    {% endif %}"
-                                    onclick="executeCommand('{{ cmd['name'] }}')">
-                                    Exécuter
-                                </button>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-        {% endfor %}
-    {% endif %}
-
 </div>
 
-<script>
-async function executeCommand(commandName) {
-    const guildId = document.getElementById('guild_select').value;
+<!-- GUILDS -->
+<div class="sec-label" style="margin-bottom:1.25rem">Serveurs disponibles</div>
 
-    if (!guildId) {
-        alert("Sélectionnez un serveur !");
-        return;
-    }
+{% if guilds %}
+<div class="guilds-grid">
+    {% for guild in guilds %}
+    <a href="#" class="guild-card">
+        {% if guild.icon %}
+            <img src="https://cdn.discordapp.com/icons/{{ guild.id }}/{{ guild.icon }}.png"
+                 alt="{{ guild.name }}"
+                 class="guild-icon-img">
+        {% else %}
+            <div class="guild-icon-placeholder">{{ guild.name[0] | upper }}</div>
+        {% endif %}
 
-    const response = await fetch("/execute_command", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-            guild_id: guildId,
-            command_name: commandName
-        })
-    });
+        <div class="guild-info">
+            <div class="guild-name">{{ guild.name }}</div>
+            <div class="guild-role">Administrateur</div>
+        </div>
 
-    const result = await response.json();
+        <svg class="guild-arrow" width="14" height="14" viewBox="0 0 16 16" fill="none">
+            <path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+    </a>
+    {% endfor %}
+</div>
 
-    if (result.success) {
-        alert(`Commande "${commandName}" exécutée sur le serveur !`);
-    } else {
-        alert(`Erreur : ${result.error}`);
-    }
-}
-</script>
+{% else %}
+<div class="no-guilds">
+    <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/><line x1="8" y1="11" x2="14" y2="11"/>
+    </svg>
+    <h3>Aucun serveur trouvé</h3>
+    <p>Vous n'êtes administrateur d'aucun serveur commun avec NexBot. Ajoutez le bot pour commencer.</p>
+</div>
+{% endif %}
 
-</body>
-</html>
+{% endblock %}

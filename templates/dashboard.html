@@ -36,6 +36,8 @@
         pointer-events: none;
     }
 
+    .dash-header-text { flex: 1; }
+
     .dash-header-text h1 {
         font-family: var(--font-head);
         font-size: 1.4rem;
@@ -55,7 +57,34 @@
         letter-spacing: .06em;
     }
 
-    /* ── GUILDS ──────────────────────────────────────────────────── */
+    .btn-logout {
+        display: inline-flex;
+        align-items: center;
+        gap: .5rem;
+        font-family: var(--font-head);
+        font-size: .58rem;
+        font-weight: 700;
+        letter-spacing: .12em;
+        text-transform: uppercase;
+        color: var(--red);
+        background: transparent;
+        border: 1px solid rgba(255,45,85,.25);
+        text-decoration: none;
+        padding: .55rem 1.1rem;
+        clip-path: polygon(8px 0%, 100% 0%, calc(100% - 8px) 100%, 0% 100%);
+        transition: border-color .2s, box-shadow .2s, background .2s;
+        flex-shrink: 0;
+    }
+
+    .btn-logout:hover {
+        border-color: var(--red);
+        background: rgba(255,45,85,.07);
+        box-shadow: 0 0 14px rgba(255,45,85,.2);
+        color: var(--red);
+        text-decoration: none;
+    }
+
+    /* ── GUILDS GRID ─────────────────────────────────────────────── */
     .guilds-grid {
         display: grid;
         grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
@@ -75,6 +104,10 @@
         transition: background .15s;
         position: relative;
         overflow: hidden;
+        cursor: pointer;
+        border: none;
+        width: 100%;
+        text-align: left;
     }
 
     .guild-card::before {
@@ -89,7 +122,7 @@
         box-shadow: 0 0 8px var(--cyan);
     }
 
-    .guild-card:hover { background: var(--surface); color: var(--text); text-decoration: none; }
+    .guild-card:hover { background: var(--surface); }
     .guild-card:hover::before { transform: scaleY(1); }
 
     .guild-icon-img {
@@ -160,6 +193,105 @@
 
     .guild-card:hover .guild-arrow { opacity: 1; transform: translateX(0); color: var(--cyan); }
 
+    /* ── GUILD DETAIL PANEL ──────────────────────────────────────── */
+    .guild-detail {
+        display: none;
+        margin-top: 2px;
+        border: 1px solid rgba(0,245,255,.3);
+        background: var(--card);
+        animation: slideDown .2s ease;
+    }
+
+    .guild-detail.open { display: block; }
+
+    @keyframes slideDown {
+        from { opacity: 0; transform: translateY(-8px); }
+        to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .detail-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 1rem 1.25rem;
+        border-bottom: 1px solid var(--border);
+    }
+
+    .detail-title {
+        font-family: var(--font-head);
+        font-size: .7rem;
+        font-weight: 700;
+        color: var(--cyan);
+        letter-spacing: .15em;
+        text-transform: uppercase;
+    }
+
+    .detail-close {
+        background: none;
+        border: 1px solid var(--border);
+        color: var(--muted);
+        font-family: var(--font-mono);
+        font-size: .65rem;
+        padding: .2rem .55rem;
+        cursor: pointer;
+        transition: color .15s, border-color .15s;
+        letter-spacing: .08em;
+    }
+
+    .detail-close:hover { color: var(--red); border-color: rgba(255,45,85,.4); }
+
+    .detail-body {
+        padding: 1.25rem;
+    }
+
+    /* Commands inside detail panel */
+    .cmd-section { margin-bottom: 1.5rem; }
+    .cmd-section:last-child { margin-bottom: 0; }
+
+    .cmd-section-title {
+        font-family: var(--font-mono);
+        font-size: .62rem;
+        font-weight: 700;
+        color: var(--muted);
+        letter-spacing: .15em;
+        text-transform: uppercase;
+        margin-bottom: .75rem;
+        display: flex;
+        align-items: center;
+        gap: .5rem;
+    }
+
+    .cmd-section-title::after {
+        content: '';
+        flex: 1;
+        height: 1px;
+        background: var(--border);
+    }
+
+    .cmd-tags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: .4rem;
+    }
+
+    .cmd-tag {
+        font-family: var(--font-mono);
+        font-size: .65rem;
+        font-weight: 700;
+        color: var(--cyan);
+        background: var(--cyan-dim);
+        border: 1px solid rgba(0,245,255,.15);
+        padding: .25rem .6rem;
+        letter-spacing: .04em;
+        cursor: default;
+        transition: background .15s, border-color .15s;
+    }
+
+    .cmd-tag:hover {
+        background: rgba(0,245,255,.12);
+        border-color: rgba(0,245,255,.35);
+    }
+
     /* ── EMPTY ───────────────────────────────────────────────────── */
     .no-guilds {
         border: 1px solid var(--border);
@@ -210,32 +342,82 @@
         <h1>{{ user.username }}</h1>
         <p>Sélectionnez un serveur à gérer</p>
     </div>
+    <a href="/logout" class="btn-logout">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+            <polyline points="16 17 21 12 16 7"/>
+            <line x1="21" y1="12" x2="9" y2="12"/>
+        </svg>
+        Déconnexion
+    </a>
 </div>
 
 <!-- GUILDS -->
 <div class="sec-label" style="margin-bottom:1.25rem">Serveurs disponibles</div>
 
 {% if guilds %}
-<div class="guilds-grid">
+<div id="guilds-container">
     {% for guild in guilds %}
-    <a href="#" class="guild-card">
-        {% if guild.icon %}
-            <img src="https://cdn.discordapp.com/icons/{{ guild.id }}/{{ guild.icon }}.png"
-                 alt="{{ guild.name }}"
-                 class="guild-icon-img">
-        {% else %}
-            <div class="guild-icon-placeholder">{{ guild.name[0] | upper }}</div>
-        {% endif %}
 
-        <div class="guild-info">
-            <div class="guild-name">{{ guild.name }}</div>
-            <div class="guild-role">Administrateur</div>
+    <!-- Guild row -->
+    <div style="display:grid; gap:2px; margin-bottom:2px; background:var(--border);">
+        <button class="guild-card" onclick="toggleDetail('detail-{{ guild.id }}', this)">
+            {% if guild.icon %}
+                <img src="https://cdn.discordapp.com/icons/{{ guild.id }}/{{ guild.icon }}.png"
+                     alt="{{ guild.name }}"
+                     class="guild-icon-img">
+            {% else %}
+                <div class="guild-icon-placeholder">{{ guild.name[0] | upper }}</div>
+            {% endif %}
+
+            <div class="guild-info">
+                <div class="guild-name">{{ guild.name }}</div>
+                <div class="guild-role">Administrateur</div>
+            </div>
+
+            <svg class="guild-arrow" width="14" height="14" viewBox="0 0 16 16" fill="none">
+                <path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+        </button>
+
+        <!-- Detail panel (hidden by default) -->
+        <div class="guild-detail" id="detail-{{ guild.id }}">
+            <div class="detail-header">
+                <span class="detail-title">
+                    <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="display:inline;vertical-align:middle;margin-right:.3rem"><rect x="2" y="2" width="12" height="12" rx="1"/><line x1="5" y1="6" x2="11" y2="6"/><line x1="5" y1="9" x2="9" y2="9"/></svg>
+                    Commandes — {{ guild.name }}
+                </span>
+                <button class="detail-close" onclick="closeDetail('detail-{{ guild.id }}')">✕#x2715; Fermer</button>
+            </div>
+            <div class="detail-body">
+                {% if categories %}
+                    {% for category in categories %}
+                    <div class="cmd-section">
+                        <div class="cmd-section-title">/{{ category.name }}</div>
+                        <div class="cmd-tags">
+                            {% if category.subcommands %}
+                                {% for cmd in category.subcommands %}
+                                    {% if cmd.subcommands %}
+                                        {% for sub in cmd.subcommands %}
+                                            <span class="cmd-tag">/{{ sub.name }}</span>
+                                        {% endfor %}
+                                    {% else %}
+                                        <span class="cmd-tag">/{{ cmd.name }}</span>
+                                    {% endif %}
+                                {% endfor %}
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <p style="font-family:var(--font-mono);font-size:.72rem;color:var(--muted);font-weight:300;">
+                        Aucune commande disponible. Exécutez <span style="color:var(--cyan)">/export-commands</span> sur Discord.
+                    </p>
+                {% endif %}
+            </div>
         </div>
+    </div>
 
-        <svg class="guild-arrow" width="14" height="14" viewBox="0 0 16 16" fill="none">
-            <path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-    </a>
     {% endfor %}
 </div>
 
@@ -248,5 +430,22 @@
     <p>Vous n'êtes administrateur d'aucun serveur commun avec NexBot. Ajoutez le bot pour commencer.</p>
 </div>
 {% endif %}
+
+<script>
+    function toggleDetail(id, btn) {
+        const panel = document.getElementById(id);
+        const isOpen = panel.classList.contains('open');
+
+        // Close all open panels first
+        document.querySelectorAll('.guild-detail.open').forEach(p => p.classList.remove('open'));
+
+        // Open clicked one if it was closed
+        if (!isOpen) panel.classList.add('open');
+    }
+
+    function closeDetail(id) {
+        document.getElementById(id).classList.remove('open');
+    }
+</script>
 
 {% endblock %}

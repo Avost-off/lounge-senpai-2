@@ -1,0 +1,480 @@
+<!doctype html>
+<html lang="fr">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}NEXBOT{% endblock %}</title>
+    <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
+    <meta name="theme-color" content="#00f5ff"/>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=JetBrains+Mono:wght@300;400;500;700&display=swap" rel="stylesheet">
+
+    <style>
+        /* ── VARIABLES ───────────────────────────────────────────── */
+        :root {
+            --bg:         #080a0e;
+            --bg2:        #0d1017;
+            --surface:    #0f1318;
+            --card:       #111620;
+            --cyan:       #00f5ff;
+            --cyan-dim:   rgba(0, 245, 255, .08);
+            --cyan-mid:   rgba(0, 245, 255, .18);
+            --green:      #39ff14;
+            --green-dim:  rgba(57, 255, 20, .08);
+            --red:        #ff2d55;
+            --text:       #c8d6e5;
+            --muted:      #4a5568;
+            --border:     rgba(0, 245, 255, .12);
+            --font-head:  'Orbitron', sans-serif;
+            --font-mono:  'JetBrains Mono', monospace;
+        }
+
+        /* ── RESET ───────────────────────────────────────────────── */
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        html { scroll-behavior: smooth; }
+
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: var(--font-mono);
+            font-size: 14px;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow-x: hidden;
+            cursor: none;
+        }
+
+        /* ── CUSTOM CURSOR ───────────────────────────────────────── */
+        .cursor {
+            position: fixed;
+            width: 12px; height: 12px;
+            background: var(--cyan);
+            border-radius: 50%;
+            pointer-events: none;
+            z-index: 9999;
+            transform: translate(-50%, -50%);
+            transition: transform .05s, width .15s, height .15s, opacity .15s;
+            box-shadow: 0 0 12px var(--cyan), 0 0 24px rgba(0,245,255,.4);
+            mix-blend-mode: screen;
+        }
+        .cursor-ring {
+            position: fixed;
+            width: 36px; height: 36px;
+            border: 1px solid rgba(0,245,255,.5);
+            border-radius: 50%;
+            pointer-events: none;
+            z-index: 9998;
+            transform: translate(-50%, -50%);
+            transition: transform .12s ease-out, width .2s, height .2s;
+        }
+        body:has(a:hover) .cursor { width: 18px; height: 18px; }
+        body:has(a:hover) .cursor-ring { width: 48px; height: 48px; border-color: var(--cyan); }
+
+        /* ── SCANLINES ───────────────────────────────────────────── */
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background: repeating-linear-gradient(
+                0deg,
+                transparent,
+                transparent 2px,
+                rgba(0,0,0,.08) 2px,
+                rgba(0,0,0,.08) 4px
+            );
+            pointer-events: none;
+            z-index: 1000;
+        }
+
+        /* ── GRID BACKGROUND ─────────────────────────────────────── */
+        body::after {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background-image:
+                linear-gradient(var(--border) 1px, transparent 1px),
+                linear-gradient(90deg, var(--border) 1px, transparent 1px);
+            background-size: 60px 60px;
+            pointer-events: none;
+            z-index: 0;
+            opacity: .4;
+        }
+
+        /* ── GLOW BLOBS ──────────────────────────────────────────── */
+        .glow {
+            position: fixed;
+            border-radius: 50%;
+            pointer-events: none;
+            z-index: 0;
+            filter: blur(160px);
+        }
+        .glow-1 { width: 500px; height: 500px; background: rgba(0,245,255,.07); top: -150px; left: -100px; }
+        .glow-2 { width: 400px; height: 400px; background: rgba(57,255,20,.05); bottom: 5%; right: -80px; }
+
+        /* ── NAVBAR ──────────────────────────────────────────────── */
+        .nav {
+            position: sticky;
+            top: 0;
+            z-index: 500;
+            background: rgba(8,10,14,.85);
+            backdrop-filter: blur(24px);
+            border-bottom: 1px solid var(--border);
+        }
+
+        .nav-inner {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 1.5rem;
+            height: 58px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+        }
+
+        .nav-brand {
+            font-family: var(--font-head);
+            font-size: .95rem;
+            font-weight: 900;
+            color: var(--cyan);
+            text-decoration: none;
+            letter-spacing: .15em;
+            text-transform: uppercase;
+            display: flex;
+            align-items: center;
+            gap: .6rem;
+        }
+
+        .brand-status {
+            display: flex;
+            align-items: center;
+            gap: .35rem;
+            font-size: .55rem;
+            font-weight: 500;
+            color: var(--green);
+            letter-spacing: .12em;
+            border: 1px solid rgba(57,255,20,.25);
+            background: rgba(57,255,20,.06);
+            padding: .2rem .55rem;
+            border-radius: 2px;
+        }
+
+        .status-dot {
+            width: 5px; height: 5px;
+            border-radius: 50%;
+            background: var(--green);
+            box-shadow: 0 0 6px var(--green);
+            animation: blink 2s ease-in-out infinite;
+        }
+
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50%       { opacity: .3; }
+        }
+
+        .nav-links {
+            display: flex;
+            align-items: center;
+            gap: .1rem;
+            list-style: none;
+        }
+
+        .nav-links a {
+            font-family: var(--font-mono);
+            font-size: .72rem;
+            font-weight: 500;
+            color: var(--muted);
+            text-decoration: none;
+            padding: .45rem .85rem;
+            letter-spacing: .08em;
+            text-transform: uppercase;
+            transition: color .2s;
+            position: relative;
+        }
+
+        .nav-links a::after {
+            content: '';
+            position: absolute;
+            bottom: 0; left: .85rem; right: .85rem;
+            height: 1px;
+            background: var(--cyan);
+            transform: scaleX(0);
+            transform-origin: left;
+            transition: transform .2s;
+        }
+
+        .nav-links a:hover { color: var(--cyan); }
+        .nav-links a:hover::after { transform: scaleX(1); }
+
+        .btn-nav {
+            font-family: var(--font-head) !important;
+            font-size: .6rem !important;
+            font-weight: 700 !important;
+            letter-spacing: .12em !important;
+            text-transform: uppercase !important;
+            color: var(--bg) !important;
+            background: var(--cyan) !important;
+            padding: .5rem 1.1rem !important;
+            clip-path: polygon(8px 0%, 100% 0%, calc(100% - 8px) 100%, 0% 100%) !important;
+            transition: box-shadow .2s !important;
+        }
+
+        .btn-nav:hover {
+            box-shadow: 0 0 20px rgba(0,245,255,.6), 0 0 40px rgba(0,245,255,.2) !important;
+            color: var(--bg) !important;
+        }
+        .btn-nav::after { display: none !important; }
+
+        .btn-nav-ghost {
+            color: var(--cyan) !important;
+            border: 1px solid var(--border) !important;
+            background: transparent !important;
+            padding: .45rem 1rem !important;
+            clip-path: polygon(8px 0%, 100% 0%, calc(100% - 8px) 100%, 0% 100%) !important;
+            font-family: var(--font-head) !important;
+            font-size: .6rem !important;
+            letter-spacing: .1em !important;
+            text-transform: uppercase !important;
+            transition: border-color .2s, box-shadow .2s !important;
+        }
+
+        .btn-nav-ghost:hover {
+            border-color: var(--cyan) !important;
+            box-shadow: 0 0 12px rgba(0,245,255,.2) !important;
+        }
+        .btn-nav-ghost::after { display: none !important; }
+
+        .hamburger {
+            display: none;
+            background: none;
+            border: 1px solid var(--border);
+            color: var(--cyan);
+            padding: .4rem .65rem;
+            cursor: pointer;
+            font-size: 1.1rem;
+        }
+
+        @media (max-width: 768px) {
+            .hamburger { display: block; }
+            .nav-links {
+                display: none;
+                position: absolute;
+                top: 58px; left: 0; right: 0;
+                flex-direction: column;
+                background: rgba(8,10,14,.97);
+                border-bottom: 1px solid var(--border);
+                padding: .75rem 1.5rem;
+                gap: .1rem;
+                z-index: 499;
+            }
+            .nav-links.open { display: flex; }
+            .nav-links a { width: 100%; }
+        }
+
+        /* ── PAGE ────────────────────────────────────────────────── */
+        .page {
+            flex: 1;
+            max-width: 1200px;
+            width: 100%;
+            margin: 0 auto;
+            padding: 2.5rem 1.5rem;
+            position: relative;
+            z-index: 1;
+        }
+
+        /* ── FOOTER ──────────────────────────────────────────────── */
+        footer {
+            position: relative;
+            z-index: 1;
+            border-top: 1px solid var(--border);
+            padding: 1.5rem;
+            text-align: center;
+            font-family: var(--font-mono);
+            font-size: .65rem;
+            color: var(--muted);
+            letter-spacing: .1em;
+            text-transform: uppercase;
+        }
+
+        footer span { color: var(--cyan); }
+
+        /* ── CORNER-CUT CARD ─────────────────────────────────────── */
+        .card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            position: relative;
+        }
+
+        .card::before {
+            content: '';
+            position: absolute;
+            top: 0; right: 0;
+            width: 16px; height: 16px;
+            background: var(--bg);
+            clip-path: polygon(0 0, 100% 0, 100% 100%);
+        }
+
+        .card::after {
+            content: '';
+            position: absolute;
+            top: 0; right: 0;
+            width: 1px; height: 22px;
+            background: var(--cyan);
+            transform: rotate(45deg) translate(7px, -7px);
+        }
+
+        /* ── UTILITY: SECTION LABEL ──────────────────────────────── */
+        .sec-label {
+            font-family: var(--font-head);
+            font-size: .58rem;
+            font-weight: 700;
+            letter-spacing: .2em;
+            text-transform: uppercase;
+            color: var(--cyan);
+            display: flex;
+            align-items: center;
+            gap: .6rem;
+            margin-bottom: 1.2rem;
+        }
+
+        .sec-label::before {
+            content: '';
+            display: inline-block;
+            width: 24px; height: 1px;
+            background: var(--cyan);
+        }
+
+        /* ── GLITCH TEXT ─────────────────────────────────────────── */
+        .glitch {
+            position: relative;
+        }
+
+        .glitch::before,
+        .glitch::after {
+            content: attr(data-text);
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%;
+            overflow: hidden;
+        }
+
+        .glitch::before {
+            color: var(--cyan);
+            animation: glitch-1 4s infinite linear;
+            clip-path: polygon(0 0, 100% 0, 100% 40%, 0 40%);
+            opacity: .7;
+        }
+
+        .glitch::after {
+            color: var(--red);
+            animation: glitch-2 4s infinite linear;
+            clip-path: polygon(0 60%, 100% 60%, 100% 100%, 0 100%);
+            opacity: .7;
+        }
+
+        @keyframes glitch-1 {
+            0%, 90%, 100% { transform: none; opacity: 0; }
+            92%  { transform: translate(-3px, 0); opacity: .7; }
+            94%  { transform: translate(3px, 0);  opacity: .7; }
+            96%  { transform: translate(-1px, 0); opacity: .7; }
+        }
+
+        @keyframes glitch-2 {
+            0%, 90%, 100% { transform: none; opacity: 0; }
+            93%  { transform: translate(3px, 0);  opacity: .7; }
+            95%  { transform: translate(-3px, 0); opacity: .7; }
+            97%  { transform: translate(2px, 0);  opacity: .7; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Cursor -->
+    <div class="cursor" id="cursor"></div>
+    <div class="cursor-ring" id="cursorRing"></div>
+
+    <!-- Background -->
+    <div class="glow glow-1"></div>
+    <div class="glow glow-2"></div>
+
+    <!-- NAVBAR -->
+    <nav class="nav">
+        <div class="nav-inner">
+            <a class="nav-brand" href="/">
+                NEXBOT
+                <span class="brand-status">
+                    <span class="status-dot"></span>
+                    ONLINE
+                </span>
+            </a>
+
+            <button class="hamburger" id="hamburger">&#9776;</button>
+
+            <ul class="nav-links" id="nav-links">
+                <li><a href="/">Accueil</a></li>
+                <li><a href="/commands">Commandes</a></li>
+                <li><a href="{{ support_link }}" target="_blank">Support</a></li>
+
+                {% if session.get('oauth2_token') %}
+                    <li><a class="btn-nav-ghost" href="/dashboard">Dashboard</a></li>
+                    <li><a class="btn-nav" href="/logout">Déconnexion</a></li>
+                {% else %}
+                    <li><a class="btn-nav" href="/login">Connexion</a></li>
+                {% endif %}
+            </ul>
+        </div>
+    </nav>
+
+    <!-- CONTENT -->
+    <main class="page">
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- FOOTER -->
+    <footer>
+        <span>&copy; 2026 NEXBOT</span> &mdash; Tous droits réservés &mdash; <span>v2.0.0</span>
+    </footer>
+
+    <script>
+        // Custom cursor
+        const cursor = document.getElementById('cursor');
+        const ring   = document.getElementById('cursorRing');
+        let mx = 0, my = 0, rx = 0, ry = 0;
+
+        document.addEventListener('mousemove', e => {
+            mx = e.clientX; my = e.clientY;
+            cursor.style.left = mx + 'px';
+            cursor.style.top  = my + 'px';
+        });
+
+        (function animRing() {
+            rx += (mx - rx) * .12;
+            ry += (my - ry) * .12;
+            ring.style.left = rx + 'px';
+            ring.style.top  = ry + 'px';
+            requestAnimationFrame(animRing);
+        })();
+
+        // Hamburger
+        document.getElementById('hamburger').addEventListener('click', () => {
+            document.getElementById('nav-links').classList.toggle('open');
+        });
+
+        // Active link
+        const path = window.location.pathname;
+        document.querySelectorAll('.nav-links a').forEach(a => {
+            if (a.getAttribute('href') === path) a.style.color = 'var(--cyan)';
+        });
+
+        // Service Worker
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register("{{ url_for('static', filename='sw.js') }}")
+                    .catch(e => console.log('SW:', e));
+            });
+        }
+    </script>
+</body>
+</html>

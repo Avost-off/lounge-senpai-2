@@ -1,109 +1,256 @@
-<!DOCTYPE html>
-<html>
-<head>
-<title>Command Manager</title>
+{% extends "layout.html" %}
+{% block title %}NEXBOT — Commandes{% endblock %}
+{% block content %}
+
 <style>
-body{background:#1e1f22;color:white;font-family:Inter;padding:40px;}
-h1{margin-bottom:30px;}
+    /* ── HEADER ──────────────────────────────────────────────────── */
+    .cmds-header {
+        padding: 3rem 0 3rem;
+        border-bottom: 1px solid var(--border);
+        margin-bottom: 2.5rem;
+    }
 
-.command-grid{
-display:grid;
-grid-template-columns:repeat(auto-fill,minmax(300px,1fr));
-gap:20px;
-}
+    .cmds-header h1 {
+        font-family: var(--font-head);
+        font-size: clamp(1.8rem, 4vw, 3rem);
+        font-weight: 900;
+        color: #fff;
+        text-transform: uppercase;
+        letter-spacing: .05em;
+        margin: .75rem 0 .75rem;
+    }
 
-.card{
-background:#2b2d31;
-padding:20px;
-border-radius:15px;
-transition:0.2s;
-}
+    .cmds-header p {
+        font-family: var(--font-mono);
+        font-size: .75rem;
+        color: var(--muted);
+        font-weight: 300;
+        line-height: 1.7;
+        max-width: 500px;
+    }
 
-.card:hover{
-transform:translateY(-5px);
-box-shadow:0 10px 20px rgba(0,0,0,0.4);
-}
+    /* ── ACCORDION ───────────────────────────────────────────────── */
+    .cmd-list-wrap {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+    }
 
-.command-name{
-font-size:18px;
-font-weight:600;
-margin-bottom:10px;
-}
+    .cmd-group {
+        border: 1px solid var(--border);
+        background: var(--card);
+        transition: border-color .2s;
+    }
 
-.category{
-font-size:12px;
-color:#9ca3af;
-margin-bottom:10px;
-}
+    .cmd-group.open { border-color: rgba(0,245,255,.3); }
 
-.description{
-font-size:14px;
-margin-bottom:15px;
-color:#d1d5db;
-}
+    .cmd-group-head {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        padding: 1rem 1.25rem;
+        cursor: pointer;
+        user-select: none;
+    }
 
-.status{
-margin-bottom:15px;
-}
+    .cmd-group-indicator {
+        font-family: var(--font-mono);
+        font-size: .65rem;
+        color: var(--muted);
+        transition: color .2s;
+        flex-shrink: 0;
+        width: 12px;
+    }
 
-.enabled{
-color:#3ba55d;
-font-weight:600;
-}
+    .cmd-group.open .cmd-group-indicator { color: var(--cyan); }
 
-.disabled{
-color:#ed4245;
-font-weight:600;
-}
+    .cmd-group-title {
+        font-family: var(--font-mono);
+        font-size: .78rem;
+        font-weight: 700;
+        color: var(--text);
+        letter-spacing: .08em;
+        transition: color .2s;
+    }
 
-button{
-background:#5865F2;
-border:none;
-padding:8px 14px;
-border-radius:8px;
-color:white;
-cursor:pointer;
-}
+    .cmd-group.open .cmd-group-title,
+    .cmd-group-head:hover .cmd-group-title { color: var(--cyan); }
 
-button:hover{
-background:#4752c4;
-}
+    .cmd-group-desc {
+        font-family: var(--font-mono);
+        font-size: .68rem;
+        color: var(--muted);
+        font-weight: 300;
+        flex: 1;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .cmd-count {
+        font-family: var(--font-mono);
+        font-size: .6rem;
+        color: var(--cyan);
+        background: var(--cyan-dim);
+        border: 1px solid rgba(0,245,255,.15);
+        padding: .15rem .5rem;
+        letter-spacing: .08em;
+        flex-shrink: 0;
+    }
+
+    .cmd-group-body {
+        display: none;
+        border-top: 1px solid var(--border);
+    }
+
+    .cmd-group.open .cmd-group-body { display: block; }
+
+    .cmd-items {
+        list-style: none;
+    }
+
+    .cmd-item {
+        display: flex;
+        align-items: flex-start;
+        gap: 1.2rem;
+        padding: .75rem 1.25rem;
+        border-bottom: 1px solid rgba(255,255,255,.02);
+        transition: background .15s;
+    }
+
+    .cmd-item:last-child { border-bottom: none; }
+    .cmd-item:hover { background: rgba(0,245,255,.02); }
+
+    .cmd-slash {
+        color: var(--cyan);
+        font-family: var(--font-mono);
+        font-size: .72rem;
+        font-weight: 700;
+        background: var(--cyan-dim);
+        border: 1px solid rgba(0,245,255,.15);
+        padding: .2rem .6rem;
+        white-space: nowrap;
+        flex-shrink: 0;
+        letter-spacing: .04em;
+        min-width: 140px;
+        text-align: center;
+    }
+
+    .cmd-desc {
+        font-family: var(--font-mono);
+        font-size: .72rem;
+        color: var(--muted);
+        font-weight: 300;
+        line-height: 1.6;
+        padding-top: .2rem;
+    }
+
+    /* ── EMPTY ───────────────────────────────────────────────────── */
+    .no-cmds {
+        border: 1px solid var(--border);
+        background: var(--card);
+        padding: 4rem 2rem;
+        text-align: center;
+    }
+
+    .no-cmds svg {
+        color: var(--muted);
+        opacity: .3;
+        margin: 0 auto 1.5rem;
+        display: block;
+    }
+
+    .no-cmds h3 {
+        font-family: var(--font-head);
+        font-size: .85rem;
+        font-weight: 700;
+        color: var(--text);
+        text-transform: uppercase;
+        letter-spacing: .1em;
+        margin-bottom: .6rem;
+    }
+
+    .no-cmds p {
+        font-family: var(--font-mono);
+        font-size: .72rem;
+        color: var(--muted);
+        font-weight: 300;
+        line-height: 1.7;
+    }
+
+    .inline-code {
+        font-family: var(--font-mono);
+        color: var(--cyan);
+        background: var(--cyan-dim);
+        padding: .1rem .4rem;
+        font-size: .7rem;
+    }
 </style>
-</head>
 
-<body>
-
-<h1>Command Manager</h1>
-
-<div class="command-grid">
-{% for cmd in commands %}
-<div class="card">
-
-<div class="command-name">{{ cmd[1] }}</div>
-<div class="category">{{ cmd[2] }}</div>
-<div class="description">{{ cmd[3] }}</div>
-
-<div class="status">
-{% if cmd[4] == 1 %}
-<span class="enabled">Enabled</span>
-{% else %}
-<span class="disabled">Disabled</span>
-{% endif %}
-</div>
-
-<form action="{{ url_for('toggle_command', cmd_id=cmd[0]) }}" method="POST">
-<button>
-{% if cmd[4] == 1 %}
-Disable
-{% else %}
-Enable
-{% endif %}
-</button>
-</form>
-
-</div>
+{% macro render_commands(command_list) %}
+<ul class="cmd-items">
+{% for command in command_list %}
+    {% if command.subcommands %}
+        {{ render_commands(command.subcommands) }}
+    {% else %}
+        <li class="cmd-item">
+            <span class="cmd-slash">/{{ command.name }}</span>
+            <span class="cmd-desc">{{ command.description }}</span>
+        </li>
+    {% endif %}
 {% endfor %}
+</ul>
+{% endmacro %}
+
+<!-- HEADER -->
+<div class="cmds-header">
+    <div class="sec-label">Documentation</div>
+    <h1>Commandes</h1>
+    <p>Référence complète des commandes disponibles. Liste synchronisée automatiquement depuis Discord.</p>
 </div>
 
-</body>
-</html>
+<!-- ACCORDION -->
+{% if categories %}
+<div class="cmd-list-wrap">
+    {% for category in categories %}
+    <div class="cmd-group {% if loop.first %}open{% endif %}">
+        <div class="cmd-group-head" onclick="this.parentElement.classList.toggle('open')">
+            <span class="cmd-group-indicator">{% if loop.first %}▼{% else %}▶{% endif %}</span>
+            <span class="cmd-group-title">/{{ category.name }}</span>
+            <span class="cmd-group-desc">{{ category.description }}</span>
+            {% if category.subcommands %}
+            <span class="cmd-count">{{ category.subcommands | length }} CMD</span>
+            {% endif %}
+        </div>
+        <div class="cmd-group-body">
+            {% if category.subcommands %}
+                {{ render_commands(category.subcommands) }}
+            {% else %}
+                <p style="padding:.8rem 1.25rem; font-family:var(--font-mono); font-size:.7rem; color:var(--muted);">Aucune sous-commande.</p>
+            {% endif %}
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+{% else %}
+<div class="no-cmds">
+    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/><line x1="8" y1="11" x2="14" y2="11"/>
+    </svg>
+    <h3>Données non disponibles</h3>
+    <p>Exécutez <span class="inline-code">/export-commands</span> sur Discord pour initialiser la liste.</p>
+</div>
+{% endif %}
+
+<script>
+    // Sync indicators on open/close
+    document.querySelectorAll('.cmd-group-head').forEach(head => {
+        head.addEventListener('click', () => {
+            const ind = head.querySelector('.cmd-group-indicator');
+            ind.textContent = head.parentElement.classList.contains('open') ? '▼' : '▶';
+        });
+    });
+</script>
+
+{% endblock %}

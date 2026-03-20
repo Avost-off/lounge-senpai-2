@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard Discord{% endblock %}
+
+{% block body %}
+<main class="dashboard-page">
+  <section class="hero">
+    <div>
+      <p class="eyebrow">PulsePanel Flask</p>
+      <h1>Dashboard Discord admin</h1>
+      <p class="muted-copy">Bienvenue {{ admin_user }}. Ce panel Python utilise ton bot Discord existant pour lire les infos du serveur.</p>
+    </div>
+    <form method="post" action="{{ url_for('logout') }}">
+      <button type="submit" class="ghost-btn">Deconnexion</button>
+    </form>
+  </section>
+
+  <section class="grid featured-grid">
+    <article class="panel featured-panel">
+      <div class="panel-row">
+        <div>
+          <p class="eyebrow">Etat du bot</p>
+          <h2>{{ "Connexion active" if overview.connected else "Connexion incomplete" }}</h2>
+        </div>
+        <span class="badge {{ 'success' if overview.connected else 'warning' }}">
+          {{ "Bot joignable" if overview.connected else "Config requise" }}
+        </span>
+      </div>
+      <p class="muted-copy">
+        {% if overview.connected %}
+          {{ overview.bot_name }} est connecte au serveur {{ overview.server_name }}.
+        {% else %}
+          {{ overview.error }}
+        {% endif %}
+      </p>
+      {% if overview.invite_url %}
+        <a href="{{ overview.invite_url }}" target="_blank" rel="noreferrer" class="inline-link">Lien d'invitation du bot</a>
+      {% endif %}
+    </article>
+  </section>
+
+  <section class="grid stats-grid">
+    <article class="panel stat-card">
+      <span class="stat-label">Membres</span>
+      <strong>{{ overview.member_count }}</strong>
+    </article>
+    <article class="panel stat-card">
+      <span class="stat-label">En ligne</span>
+      <strong>{{ overview.online_count }}</strong>
+    </article>
+    <article class="panel stat-card">
+      <span class="stat-label">Salons</span>
+      <strong>{{ overview.channel_count }}</strong>
+    </article>
+    <article class="panel stat-card">
+      <span class="stat-label">Roles</span>
+      <strong>{{ overview.role_count }}</strong>
+    </article>
+  </section>
+
+  <section class="grid info-grid">
+    <article class="panel">
+      <p class="eyebrow">Configuration</p>
+      <h2>Variables a renseigner</h2>
+      <ul class="plain-list">
+        <li><code>FLASK_SECRET_KEY</code> pour la session admin</li>
+        <li><code>ADMIN_USERNAME</code> et <code>ADMIN_PASSWORD</code> pour la connexion</li>
+        <li><code>DISCORD_BOT_TOKEN</code> et <code>DISCORD_GUILD_ID</code> pour le bot</li>
+      </ul>
+    </article>
+    <article class="panel">
+      <p class="eyebrow">Python</p>
+      <h2>Base solide</h2>
+      <ul class="plain-list">
+        <li>Flask pour le serveur web</li>
+        <li>Session admin simple et rapide</li>
+        <li>Connexion a l'API Discord via Requests</li>
+      </ul>
+    </article>
+  </section>
+</main>
+{% endblock %}

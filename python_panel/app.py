@@ -10,8 +10,7 @@ from flask import Flask, flash, redirect, render_template, request, session, url
 
 
 load_dotenv()
-
-
+    OAUTH_CLIENT_ID = os.getenv("OAUTH_CLIENT_ID", "dev")
 def create_app() -> Flask:
     app = Flask(__name__)
     app.config["SECRET_KEY"] = os.getenv("FLASK_SECRET_KEY", "change-me")

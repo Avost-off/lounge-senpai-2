@@ -8,9 +8,14 @@ import requests
 from dotenv import load_dotenv
 from flask import Flask, flash, redirect, render_template, request, session, url_for
 
+OAUTH_CLIENT_ID = os.getenv("OAUTH_CLIENT_ID")
+OAUTH_CLIENT_SECRET = os.getenv("OAUTH_CLIENT_SECRET")
 
+if not OAUTH_CLIENT_ID or not OAUTH_CLIENT_SECRET:
+    print("⚠️ OAuth non configuré (mode dev)")
+    import os
+print("CLIENT_ID =", os.getenv("OAUTH_CLIENT_ID"))
 load_dotenv()
-    OAUTH_CLIENT_ID = os.getenv("OAUTH_CLIENT_ID", "dev")
 def create_app() -> Flask:
     app = Flask(__name__)
     app.config["SECRET_KEY"] = os.getenv("FLASK_SECRET_KEY", "change-me")

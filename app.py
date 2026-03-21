@@ -1,7 +1,10 @@
+import json
 import os
 import sqlite3
+from urllib.parse import urlencode
+
 import requests
-from flask import Flask, render_template, redirect, request, session, flash
+from flask import Flask, flash, redirect, render_template, request, session, url_for
 
 # ==============================
 # APP FLASK
@@ -19,7 +22,7 @@ CLIENT_SECRET = os.environ.get("CLIENT_SECRET")
 REDIRECT_URI = os.environ.get("REDIRECT_URI")
 
 if not CLIENT_ID or not CLIENT_SECRET or not REDIRECT_URI:
-    raise RuntimeError("⚠️ OAuth non configuré !")
+    raise RuntimeError("OAuth non configure !")
 
 DISCORD_AUTH_URL = "https://discord.com/api/oauth2/authorize"
 DISCORD_TOKEN_URL = "https://discord.com/api/oauth2/token"
@@ -33,6 +36,7 @@ def get_db():
     conn = sqlite3.connect(DATABASE, timeout=10)
     conn.row_factory = sqlite3.Row
     return conn
+
 
 def init_db():
     db = get_db()
@@ -64,10 +68,50 @@ def init_db():
         leveling_enabled INTEGER DEFAULT 1
     )
     """)
+    db.execute("""
+    CREATE TABLE IF NOT EXISTS oauth_sessions (
+        user_id TEXT PRIMARY KEY,
+        username TEXT,
+        access_token TEXT NOT NULL,
+        guilds_json TEXT NOT NULL
+    )
+    """)
     db.commit()
     db.close()
 
-# ⚠️ Initialise la DB au lancement
+
+def save_oauth_session(user_id: str, username: str, access_token: str, guilds_admin: list[dict]):
+    db = get_db()
+    db.execute("""
+        INSERT INTO oauth_sessions (user_id, username, access_token, guilds_json)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(user_id) DO UPDATE SET
+            username = excluded.username,
+            access_token = excluded.access_token,
+            guilds_json = excluded.guilds_json
+    """, (user_id, username, access_token, json.dumps(guilds_admin)))
+    db.commit()
+    db.close()
+
+
+def get_saved_guilds(user_id: str) -> list[dict]:
+    db = get_db()
+    row = db.execute(
+        "SELECT guilds_json FROM oauth_sessions WHERE user_id = ?",
+        (user_id,)
+    ).fetchone()
+    db.close()
+
+    if not row:
+        return []
+
+    try:
+        return json.loads(row["guilds_json"])
+    except (TypeError, json.JSONDecodeError):
+        return []
+
+
+# Initialise la DB au lancement
 init_db()
 
 # ==============================
@@ -75,65 +119,71 @@ init_db()
 # ==============================
 @app.route("/login")
 def login():
-    return redirect(
-        f"{DISCORD_AUTH_URL}?client_id={CLIENT_ID}"
-        f"&redirect_uri={REDIRECT_URI}"
-        f"&response_type=code&scope=identify%20guilds"
-    )
+    params = {
+        "client_id": CLIENT_ID,
+        "redirect_uri": REDIRECT_URI,
+        "response_type": "code",
+        "scope": "identify guilds",
+        "prompt": "consent",
+    }
+    return redirect(f"{DISCORD_AUTH_URL}?{urlencode(params)}")
+
 
 @app.route("/callback")
 def callback():
     code = request.args.get("code")
     if not code:
         flash("Erreur OAuth : code manquant", "danger")
-        return redirect("/login")
+        return redirect(url_for("login"))
 
     data = {
         "client_id": CLIENT_ID,
         "client_secret": CLIENT_SECRET,
         "grant_type": "authorization_code",
         "code": code,
-        "redirect_uri": REDIRECT_URI
+        "redirect_uri": REDIRECT_URI,
     }
 
     headers = {"Content-Type": "application/x-www-form-urlencoded"}
+
     try:
         token_resp = requests.post(DISCORD_TOKEN_URL, data=data, headers=headers, timeout=10)
-        token_resp.raise_for_status()  # déclenche exception pour HTTP 4xx ou 5xx
+        token_resp.raise_for_status()
         token_json = token_resp.json()
-    except requests.exceptions.HTTPError as e:
+    except requests.exceptions.HTTPError:
         if token_resp.status_code == 429:
-            flash("⚠️ Trop de requêtes sur Discord. Réessaie dans quelques minutes.", "warning")
+            flash("Trop de requetes sur Discord. Reessaie dans quelques minutes.", "warning")
         else:
             flash(f"Erreur OAuth Discord: {token_resp.status_code}", "danger")
-        return redirect("/login")
+        return redirect(url_for("login"))
     except requests.exceptions.RequestException:
-        flash("⚠️ Impossible de contacter l'API Discord.", "danger")
-        return redirect("/login")
+        flash("Impossible de contacter l'API Discord.", "danger")
+        return redirect(url_for("login"))
     except ValueError:
-        flash("⚠️ Réponse invalide de l'API Discord.", "danger")
-        return redirect("/login")
+        flash("Reponse invalide de l'API Discord.", "danger")
+        return redirect(url_for("login"))
 
-    if "access_token" not in token_json:
+    access_token = token_json.get("access_token")
+    if not access_token:
         flash("Erreur OAuth : token invalide", "danger")
-        return redirect("/login")
+        return redirect(url_for("login"))
 
-    access_token = token_json["access_token"]
+    auth_headers = {"Authorization": f"Bearer {access_token}"}
 
     try:
-        user_resp = requests.get(DISCORD_API_URL, headers={"Authorization": f"Bearer {access_token}"}, timeout=10)
+        user_resp = requests.get(DISCORD_API_URL, headers=auth_headers, timeout=10)
         user_resp.raise_for_status()
         user = user_resp.json()
 
-        guilds_resp = requests.get(DISCORD_GUILDS_URL, headers={"Authorization": f"Bearer {access_token}"}, timeout=10)
+        guilds_resp = requests.get(DISCORD_GUILDS_URL, headers=auth_headers, timeout=10)
         guilds_resp.raise_for_status()
         guilds = guilds_resp.json()
     except requests.exceptions.RequestException:
-        flash("⚠️ Impossible de récupérer tes informations Discord.", "danger")
-        return redirect("/login")
+        flash("Impossible de recuperer tes informations Discord.", "danger")
+        return redirect(url_for("login"))
     except ValueError:
-        flash("⚠️ Réponse invalide de l'API Discord.", "danger")
-        return redirect("/login")
+        flash("Reponse invalide de l'API Discord.", "danger")
+        return redirect(url_for("login"))
 
     guilds_admin = []
     for g in guilds:
@@ -144,29 +194,42 @@ def callback():
                 "name": g["name"]
             })
 
-    session["user"] = {
-        "id": user.get("id"),
-        "username": user.get("username")
-    }
-    session["guilds"] = guilds_admin
-    session["token"] = access_token
+    user_id = user.get("id")
+    username = user.get("username")
 
-    return redirect("/")
+    if not user_id or not username:
+        flash("Informations utilisateur Discord invalides.", "danger")
+        return redirect(url_for("login"))
+
+    save_oauth_session(user_id, username, access_token, guilds_admin)
+
+    # On garde la session Flask tres legere
+    session.clear()
+    session["user_id"] = user_id
+    session["username"] = username
+
+    return redirect(url_for("dashboard"))
+
 
 @app.route("/logout")
 def logout():
     session.clear()
-    return redirect("/login")
+    return redirect(url_for("login"))
 
 # ==============================
 # DASHBOARD
 # ==============================
 @app.route("/", methods=["GET"])
 def dashboard():
-    if "user" not in session:
-        return redirect("/login")
+    user_id = session.get("user_id")
+    username = session.get("username")
 
+    if not user_id or not username:
+        return redirect(url_for("login"))
+
+    guilds = get_saved_guilds(user_id)
     selected_guild = request.args.get("guild_id")
+
     db = get_db()
 
     users = []
@@ -174,17 +237,32 @@ def dashboard():
     total_balance = 0
 
     if selected_guild:
-        users = db.execute("SELECT * FROM users WHERE guild_id=?", (selected_guild,)).fetchall()
-        commands = db.execute("SELECT * FROM commands WHERE guild_id=?", (selected_guild,)).fetchall()
-        result = db.execute("SELECT SUM(balance) FROM users WHERE guild_id=?", (selected_guild,)).fetchone()
-        total_balance = result[0] if result and result[0] else 0
+        users = db.execute(
+            "SELECT * FROM users WHERE guild_id = ?",
+            (selected_guild,)
+        ).fetchall()
+
+        commands = db.execute(
+            "SELECT * FROM commands WHERE guild_id = ?",
+            (selected_guild,)
+        ).fetchall()
+
+        result = db.execute(
+            "SELECT SUM(balance) AS total FROM users WHERE guild_id = ?",
+            (selected_guild,)
+        ).fetchone()
+
+        total_balance = result["total"] if result and result["total"] else 0
 
     db.close()
 
     return render_template(
         "dashboard.html",
-        user=session["user"],
-        guilds=session.get("guilds", []),
+        user={
+            "id": user_id,
+            "username": username
+        },
+        guilds=guilds,
         selected_guild=selected_guild,
         users=users,
         commands=commands,
@@ -196,22 +274,24 @@ def dashboard():
 # ==============================
 @app.route("/toggle_command_ajax", methods=["POST"])
 def toggle_command_ajax():
-    if "user" not in session:
-        return {"success": False}
+    if "user_id" not in session:
+        return {"success": False}, 401
 
-    data = request.get_json()
+    data = request.get_json(silent=True) or {}
     command_id = data.get("command_id")
+
     if not command_id:
-        return {"success": False}
+        return {"success": False}, 400
 
     db = get_db()
-    cmd = db.execute("SELECT enabled FROM commands WHERE id=?", (command_id,)).fetchone()
+    cmd = db.execute("SELECT enabled FROM commands WHERE id = ?", (command_id,)).fetchone()
+
     if not cmd:
         db.close()
-        return {"success": False}
+        return {"success": False}, 404
 
     new_state = 0 if cmd["enabled"] else 1
-    db.execute("UPDATE commands SET enabled=? WHERE id=?", (new_state, command_id))
+    db.execute("UPDATE commands SET enabled = ? WHERE id = ?", (new_state, command_id))
     db.commit()
     db.close()
 

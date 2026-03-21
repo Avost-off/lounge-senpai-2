@@ -18,7 +18,6 @@ CLIENT_ID = os.environ.get("CLIENT_ID")
 CLIENT_SECRET = os.environ.get("CLIENT_SECRET")
 REDIRECT_URI = os.environ.get("REDIRECT_URI")
 
-# ⚠️ NE PLUS CRASH
 if not CLIENT_ID or not CLIENT_SECRET or not REDIRECT_URI:
     print("⚠️ Variables OAuth manquantes ! (mode dev)")
 
@@ -80,8 +79,7 @@ init_db()
 @app.route("/login")
 def login():
     if not CLIENT_ID or not REDIRECT_URI:
-        flash("OAuth non configuré", "danger")
-        return redirect("/")
+        return "⚠️ OAuth non configuré. Ajoute CLIENT_ID et REDIRECT_URI sur Render."
 
     return redirect(
         f"{DISCORD_AUTH_URL}?client_id={CLIENT_ID}"
@@ -92,8 +90,7 @@ def login():
 @app.route("/callback")
 def callback():
     if not CLIENT_ID or not CLIENT_SECRET or not REDIRECT_URI:
-        flash("OAuth non configuré", "danger")
-        return redirect("/")
+        return "⚠️ OAuth non configuré."
 
     code = request.args.get("code")
     if not code:
@@ -157,6 +154,8 @@ def logout():
 @app.route("/", methods=["GET"])
 def dashboard():
     if "user" not in session:
+        if not CLIENT_ID:
+            return "⚠️ OAuth non configuré"
         return redirect("/login")
 
     selected_guild = request.args.get("guild_id")

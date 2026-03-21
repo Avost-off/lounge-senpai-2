@@ -1,17 +1,35 @@
 import json
 import os
 import sqlite3
+from datetime import timedelta
 from urllib.parse import urlencode
 
 import requests
-from flask import Flask, flash, redirect, render_template, request, session, url_for
+from flask import (
+    Flask,
+    flash,
+    redirect,
+    render_template,
+    request,
+    session,
+    url_for,
+    get_flashed_messages,
+)
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 # ==============================
 # APP FLASK
 # ==============================
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 app = Flask(__name__, template_folder=os.path.join(BASE_DIR, "templates"))
-app.secret_key = os.environ.get("SESSION_SECRET", "CHANGE_THIS_SECRET_KEY")
+app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
+
+app.config["SECRET_KEY"] = os.environ.get("SESSION_SECRET", "CHANGE_THIS_SECRET_KEY")
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["SESSION_COOKIE_SECURE"] = True
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=7)
+
 DATABASE = os.path.join(BASE_DIR, "main_database.db")
 
 # ==============================
@@ -111,7 +129,6 @@ def get_saved_guilds(user_id: str) -> list[dict]:
         return []
 
 
-# Initialise la DB au lancement
 init_db()
 
 # ==============================
@@ -119,6 +136,86 @@ init_db()
 # ==============================
 @app.route("/login")
 def login():
+    if session.get("user_id"):
+        return redirect(url_for("dashboard"))
+
+    messages = get_flashed_messages(with_categories=True)
+
+    html_messages = ""
+    for category, message in messages:
+        color = "#ffb4a0" if category in ("danger", "error") else "#ffd27d"
+        html_messages += f"""
+        <div style="margin-bottom:12px;padding:12px 14px;border-radius:12px;background:rgba(255,255,255,.06);color:{color};">
+            {message}
+        </div>
+        """
+
+    return f"""
+    <!DOCTYPE html>
+    <html lang="fr">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Connexion Discord</title>
+        <style>
+            body {{
+                margin: 0;
+                min-height: 100vh;
+                display: grid;
+                place-items: center;
+                font-family: Arial, sans-serif;
+                background: linear-gradient(135deg, #0a0f1c, #111b2f);
+                color: white;
+            }}
+            .card {{
+                width: min(92vw, 460px);
+                padding: 32px;
+                border-radius: 24px;
+                background: rgba(255,255,255,.05);
+                border: 1px solid rgba(255,255,255,.08);
+                box-shadow: 0 20px 60px rgba(0,0,0,.35);
+            }}
+            .btn {{
+                display: inline-block;
+                margin-top: 12px;
+                padding: 14px 18px;
+                border-radius: 14px;
+                background: #5865f2;
+                color: white;
+                text-decoration: none;
+                font-weight: bold;
+            }}
+            .muted {{
+                color: #aab4d6;
+                line-height: 1.6;
+            }}
+            code {{
+                background: rgba(255,255,255,.08);
+                padding: 2px 8px;
+                border-radius: 999px;
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="card">
+            <p style="text-transform:uppercase;letter-spacing:.18em;font-size:.72rem;color:#9fb0d0;">Discord OAuth</p>
+            <h1 style="margin-top:0;">Connexion au panel</h1>
+            <p class="muted">Clique sur le bouton pour te connecter avec Discord.</p>
+            {html_messages}
+            <a class="btn" href="{url_for('discord_login')}">Se connecter avec Discord</a>
+            <p class="muted" style="margin-top:16px;">
+                Verifie aussi que <code>REDIRECT_URI</code> vaut exactement :
+                <br>
+                <code>{REDIRECT_URI}</code>
+            </p>
+        </div>
+    </body>
+    </html>
+    """
+
+
+@app.route("/discord-login")
+def discord_login():
     params = {
         "client_id": CLIENT_ID,
         "redirect_uri": REDIRECT_URI,
@@ -132,7 +229,15 @@ def login():
 @app.route("/callback")
 def callback():
     code = request.args.get("code")
+    error = request.args.get("error")
+
+    if error:
+        app.logger.warning("Discord OAuth error returned: %s", error)
+        flash(f"Erreur OAuth Discord: {error}", "danger")
+        return redirect(url_for("login"))
+
     if not code:
+        app.logger.warning("Callback sans code")
         flash("Erreur OAuth : code manquant", "danger")
         return redirect(url_for("login"))
 
@@ -147,41 +252,48 @@ def callback():
     headers = {"Content-Type": "application/x-www-form-urlencoded"}
 
     try:
-        token_resp = requests.post(DISCORD_TOKEN_URL, data=data, headers=headers, timeout=10)
+        token_resp = requests.post(DISCORD_TOKEN_URL, data=data, headers=headers, timeout=15)
+        token_text = token_resp.text
         token_resp.raise_for_status()
         token_json = token_resp.json()
     except requests.exceptions.HTTPError:
+        app.logger.error("Discord token HTTP error %s: %s", token_resp.status_code, token_text)
         if token_resp.status_code == 429:
             flash("Trop de requetes sur Discord. Reessaie dans quelques minutes.", "warning")
         else:
             flash(f"Erreur OAuth Discord: {token_resp.status_code}", "danger")
         return redirect(url_for("login"))
-    except requests.exceptions.RequestException:
+    except requests.exceptions.RequestException as exc:
+        app.logger.exception("Erreur reseau Discord token: %s", exc)
         flash("Impossible de contacter l'API Discord.", "danger")
         return redirect(url_for("login"))
     except ValueError:
+        app.logger.error("Reponse token Discord invalide")
         flash("Reponse invalide de l'API Discord.", "danger")
         return redirect(url_for("login"))
 
     access_token = token_json.get("access_token")
     if not access_token:
+        app.logger.error("Token Discord absent: %s", token_json)
         flash("Erreur OAuth : token invalide", "danger")
         return redirect(url_for("login"))
 
     auth_headers = {"Authorization": f"Bearer {access_token}"}
 
     try:
-        user_resp = requests.get(DISCORD_API_URL, headers=auth_headers, timeout=10)
+        user_resp = requests.get(DISCORD_API_URL, headers=auth_headers, timeout=15)
         user_resp.raise_for_status()
         user = user_resp.json()
 
-        guilds_resp = requests.get(DISCORD_GUILDS_URL, headers=auth_headers, timeout=10)
+        guilds_resp = requests.get(DISCORD_GUILDS_URL, headers=auth_headers, timeout=15)
         guilds_resp.raise_for_status()
         guilds = guilds_resp.json()
-    except requests.exceptions.RequestException:
+    except requests.exceptions.RequestException as exc:
+        app.logger.exception("Erreur recuperation profil/guilds Discord: %s", exc)
         flash("Impossible de recuperer tes informations Discord.", "danger")
         return redirect(url_for("login"))
     except ValueError:
+        app.logger.error("JSON Discord invalide pour user/guilds")
         flash("Reponse invalide de l'API Discord.", "danger")
         return redirect(url_for("login"))
 
@@ -198,15 +310,19 @@ def callback():
     username = user.get("username")
 
     if not user_id or not username:
+        app.logger.error("Utilisateur Discord invalide: %s", user)
         flash("Informations utilisateur Discord invalides.", "danger")
         return redirect(url_for("login"))
 
     save_oauth_session(user_id, username, access_token, guilds_admin)
 
-    # On garde la session Flask tres legere
     session.clear()
+    session.permanent = True
     session["user_id"] = user_id
     session["username"] = username
+    session.modified = True
+
+    app.logger.info("Connexion reussie pour user_id=%s username=%s", user_id, username)
 
     return redirect(url_for("dashboard"))
 
@@ -225,6 +341,7 @@ def dashboard():
     username = session.get("username")
 
     if not user_id or not username:
+        app.logger.warning("Session absente sur dashboard, redirection login")
         return redirect(url_for("login"))
 
     guilds = get_saved_guilds(user_id)
@@ -298,7 +415,7 @@ def toggle_command_ajax():
     return {"success": True, "new_state": new_state}
 
 # ==============================
-# RUN LOCAL ONLY
+# RUN
 # ==============================
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))

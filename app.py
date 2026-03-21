@@ -11,6 +11,10 @@ app = Flask(__name__, template_folder=os.path.join(BASE_DIR, "templates"))
 app.secret_key = os.environ.get("SESSION_SECRET", "CHANGE_THIS_SECRET_KEY")
 DATABASE = os.path.join(BASE_DIR, "main_database.db")
 
+# Sécurisation cookies pour Render / HTTPS
+app.config["SESSION_COOKIE_SECURE"] = True
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+
 # ==============================
 # DISCORD OAUTH CONFIG
 # ==============================
@@ -19,7 +23,7 @@ CLIENT_SECRET = os.environ.get("CLIENT_SECRET")
 REDIRECT_URI = os.environ.get("REDIRECT_URI")
 
 if not CLIENT_ID or not CLIENT_SECRET or not REDIRECT_URI:
-    print("⚠️ OAuth non configuré (Render variables manquantes)")
+    raise RuntimeError("⚠️ Variables OAuth manquantes !")
 
 DISCORD_AUTH_URL = "https://discord.com/api/oauth2/authorize"
 DISCORD_TOKEN_URL = "https://discord.com/api/oauth2/token"
@@ -67,6 +71,7 @@ def init_db():
     db.commit()
     db.close()
 
+# ⚠️ Initialise la DB au démarrage
 init_db()
 
 # ==============================
@@ -74,8 +79,6 @@ init_db()
 # ==============================
 @app.route("/login")
 def login():
-    if not CLIENT_ID or not CLIENT_SECRET or not REDIRECT_URI:
-        return "⚠️ OAuth non configuré. Vérifie tes variables Render."
     return redirect(
         f"{DISCORD_AUTH_URL}?client_id={CLIENT_ID}"
         f"&redirect_uri={REDIRECT_URI}"
@@ -84,9 +87,6 @@ def login():
 
 @app.route("/callback")
 def callback():
-    if not CLIENT_ID or not CLIENT_SECRET or not REDIRECT_URI:
-        return "⚠️ OAuth non configuré. Vérifie tes variables Render."
-
     code = request.args.get("code")
     if not code:
         flash("Erreur OAuth : code manquant", "danger")
@@ -99,50 +99,55 @@ def callback():
         "code": code,
         "redirect_uri": REDIRECT_URI
     }
-
     headers = {"Content-Type": "application/x-www-form-urlencoded"}
-    token_resp = requests.post(DISCORD_TOKEN_URL, data=data, headers=headers)
-
-    # ✅ Vérifier que Discord a répondu correctement
-    if token_resp.status_code != 200:
-        return f"Erreur OAuth Discord: {token_resp.status_code} - {token_resp.text}"
-
-    if not token_resp.text:
-        return f"Erreur OAuth Discord: réponse vide - vérifie CLIENT_ID, CLIENT_SECRET et REDIRECT_URI"
 
     try:
+        token_resp = requests.post(DISCORD_TOKEN_URL, data=data, headers=headers, timeout=10)
+        token_resp.raise_for_status()  # HTTP error
         token_json = token_resp.json()
+    except requests.exceptions.HTTPError as e:
+        if token_resp.status_code == 429:
+            flash("⚠️ Trop de requêtes vers Discord. Réessaye dans quelques minutes.", "warning")
+        else:
+            flash(f"Erreur OAuth HTTP: {token_resp.status_code}", "danger")
+        return redirect("/login")
+    except requests.exceptions.RequestException as e:
+        flash(f"Erreur réseau OAuth: {e}", "danger")
+        return redirect("/login")
     except ValueError:
-        return f"Erreur OAuth Discord: réponse non JSON - {token_resp.text}"
+        flash("Erreur OAuth: réponse Discord invalide.", "danger")
+        return redirect("/login")
 
     access_token = token_json.get("access_token")
     if not access_token:
-        return f"Erreur OAuth Discord: access_token manquant - {token_json}"
+        flash("Erreur OAuth : token manquant", "danger")
+        return redirect("/login")
 
-    # ✅ Sécuriser la récupération user
-    user_resp = requests.get(DISCORD_API_URL, headers={"Authorization": f"Bearer {access_token}"})
-    if user_resp.status_code != 200:
-        return f"Erreur récupération user Discord: {user_resp.status_code} - {user_resp.text}"
+    # Récupération des infos utilisateur
     try:
+        user_resp = requests.get(DISCORD_API_URL, headers={"Authorization": f"Bearer {access_token}"}, timeout=10)
+        user_resp.raise_for_status()
         user = user_resp.json()
-    except ValueError:
-        return f"Erreur JSON user Discord: {user_resp.text}"
 
-    guilds_resp = requests.get(DISCORD_GUILDS_URL, headers={"Authorization": f"Bearer {access_token}"})
-    if guilds_resp.status_code != 200:
-        return f"Erreur récupération guilds Discord: {guilds_resp.status_code} - {guilds_resp.text}"
-    try:
+        guilds_resp = requests.get(DISCORD_GUILDS_URL, headers={"Authorization": f"Bearer {access_token}"}, timeout=10)
+        guilds_resp.raise_for_status()
         guilds = guilds_resp.json()
+    except requests.exceptions.RequestException as e:
+        flash(f"Impossible de récupérer les infos Discord: {e}", "danger")
+        return redirect("/login")
     except ValueError:
-        return f"Erreur JSON guilds Discord: {guilds_resp.text}"
+        flash("Réponse JSON Discord invalide.", "danger")
+        return redirect("/login")
 
+    # Filtrer les guildes où l'utilisateur est admin
     guilds_admin = []
     for g in guilds:
         permissions = int(g.get("permissions", 0))
         if permissions & 0x8:  # admin
             guilds_admin.append({"id": g["id"], "name": g["name"]})
 
-    session["user"] = {"id": user.get("id"), "username": user.get("username")}
+    # Stockage session
+    session["user"] = {"id": user["id"], "username": user["username"]}
     session["guilds"] = guilds_admin
     session["token"] = access_token
 
@@ -158,15 +163,12 @@ def logout():
 # ==============================
 @app.route("/", methods=["GET"])
 def dashboard():
-    if not session.get("user"):
+    if "user" not in session:
         return redirect("/login")
 
     selected_guild = request.args.get("guild_id")
     db = get_db()
-
-    users = []
-    commands = []
-    total_balance = 0
+    users, commands, total_balance = [], [], 0
 
     if selected_guild:
         users = db.execute("SELECT * FROM users WHERE guild_id=?", (selected_guild,)).fetchall()
@@ -191,7 +193,7 @@ def dashboard():
 # ==============================
 @app.route("/toggle_command_ajax", methods=["POST"])
 def toggle_command_ajax():
-    if not session.get("user"):
+    if "user" not in session:
         return {"success": False}
 
     data = request.get_json()

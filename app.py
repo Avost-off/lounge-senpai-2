@@ -8,19 +8,30 @@ from urllib.parse import urlencode
 
 import requests
 from flask import Flask, flash, redirect, request, session, url_for, render_template_string
+from flask_session import Session
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATABASE = os.path.join(BASE_DIR, "main_database.db")
+SESSION_DIR = os.path.join(BASE_DIR, "flask_session")
+
+os.makedirs(SESSION_DIR, exist_ok=True)
 
 app = Flask(__name__)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 
 app.config["SECRET_KEY"] = os.environ.get("SESSION_SECRET", "CHANGE_THIS_SECRET_KEY")
+app.config["SESSION_TYPE"] = "filesystem"
+app.config["SESSION_FILE_DIR"] = SESSION_DIR
+app.config["SESSION_PERMANENT"] = True
+app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=7)
+app.config["SESSION_USE_SIGNER"] = True
+app.config["SESSION_COOKIE_NAME"] = "panel_session"
 app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SECURE"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
-app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=7)
+
+Session(app)
 
 CLIENT_ID = os.environ.get("CLIENT_ID")
 CLIENT_SECRET = os.environ.get("CLIENT_SECRET")
@@ -397,7 +408,6 @@ def get_login_cooldown_remaining() -> int:
     started_at = session.get("oauth_started_at")
     if not started_at:
         return 0
-
     remaining = LOGIN_COOLDOWN_SECONDS - int(time.time() - started_at)
     return max(0, remaining)
 
@@ -414,7 +424,6 @@ def healthz():
 def login():
     if session.get("user_id"):
         return redirect(url_for("dashboard"))
-
     return render_template_string(
         LOGIN_HTML,
         redirect_uri=REDIRECT_URI,
@@ -465,7 +474,7 @@ def callback():
         return redirect(url_for("login"))
 
     if not expected_state or returned_state != expected_state:
-        flash("Session OAuth invalide ou expirée. Relance la connexion.", "danger")
+        flash("Session OAuth invalide ou expiree. Relance la connexion.", "danger")
         session.pop("oauth_state", None)
         return redirect(url_for("login"))
 

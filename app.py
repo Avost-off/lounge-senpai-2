@@ -1,8 +1,6 @@
-import json
 import os
 import secrets
 import sqlite3
-import time
 from datetime import timedelta
 from urllib.parse import urlencode
 
@@ -45,8 +43,6 @@ DISCORD_TOKEN_URL = "https://discord.com/api/oauth2/token"
 DISCORD_API_URL = "https://discord.com/api/users/@me"
 DISCORD_GUILDS_URL = "https://discord.com/api/users/@me/guilds"
 
-LOGIN_COOLDOWN_SECONDS = 15
-
 LOGIN_HTML = """
 <!DOCTYPE html>
 <html lang="fr">
@@ -82,10 +78,6 @@ LOGIN_HTML = """
             text-decoration: none;
             font-weight: bold;
         }
-        .btn.disabled {
-            opacity: .55;
-            pointer-events: none;
-        }
         .msg {
             margin: 10px 0;
             padding: 10px 12px;
@@ -116,11 +108,7 @@ LOGIN_HTML = """
             {% endif %}
         {% endwith %}
 
-        {% if cooldown_remaining > 0 %}
-            <a class="btn disabled" href="#">Patiente {{ cooldown_remaining }} seconde(s)</a>
-        {% else %}
-            <a class="btn" href="{{ url_for('discord_login') }}">Se connecter avec Discord</a>
-        {% endif %}
+        <a class="btn" href="{{ url_for('discord_login') }}">Se connecter avec Discord</a>
 
         <p class="muted" style="margin-top:16px;">
             Redirect URI attendue :
@@ -194,29 +182,6 @@ DASHBOARD_HTML = """
             border-radius: 12px;
             border: 0;
         }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-        th, td {
-            padding: 10px;
-            border-bottom: 1px solid rgba(255,255,255,.08);
-            text-align: left;
-        }
-        @media (max-width: 900px) {
-            .grid {
-                grid-template-columns: repeat(2, 1fr);
-            }
-        }
-        @media (max-width: 600px) {
-            .grid {
-                grid-template-columns: 1fr;
-            }
-            .topbar {
-                flex-direction: column;
-                align-items: flex-start;
-            }
-        }
     </style>
 </head>
 <body>
@@ -246,78 +211,10 @@ DASHBOARD_HTML = """
     </div>
 
     <div class="grid">
-        <div class="card">
-            <div class="muted">Serveurs admin</div>
-            <h2>{{ guilds|length }}</h2>
-        </div>
-        <div class="card">
-            <div class="muted">Utilisateurs</div>
-            <h2>{{ users|length }}</h2>
-        </div>
-        <div class="card">
-            <div class="muted">Commandes</div>
-            <h2>{{ commands|length }}</h2>
-        </div>
-        <div class="card">
-            <div class="muted">Balance totale</div>
-            <h2>{{ total_balance }}</h2>
-        </div>
-    </div>
-
-    <div class="panel">
-        <h2>Utilisateurs</h2>
-        {% if users %}
-            <table>
-                <thead>
-                    <tr>
-                        <th>Username</th>
-                        <th>XP</th>
-                        <th>Level</th>
-                        <th>Balance</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for u in users %}
-                    <tr>
-                        <td>{{ u.username }}</td>
-                        <td>{{ u.xp }}</td>
-                        <td>{{ u.level }}</td>
-                        <td>{{ u.balance }}</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        {% else %}
-            <p class="muted">Aucun utilisateur pour ce serveur.</p>
-        {% endif %}
-    </div>
-
-    <div class="panel">
-        <h2>Commandes</h2>
-        {% if commands %}
-            <table>
-                <thead>
-                    <tr>
-                        <th>Nom</th>
-                        <th>Categorie</th>
-                        <th>Description</th>
-                        <th>Etat</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for c in commands %}
-                    <tr>
-                        <td>{{ c.name }}</td>
-                        <td>{{ c.category }}</td>
-                        <td>{{ c.description }}</td>
-                        <td>{{ "Active" if c.enabled else "Desactivee" }}</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        {% else %}
-            <p class="muted">Aucune commande pour ce serveur.</p>
-        {% endif %}
+        <div class="card"><div class="muted">Serveurs admin</div><h2>{{ guilds|length }}</h2></div>
+        <div class="card"><div class="muted">Utilisateurs</div><h2>{{ users|length }}</h2></div>
+        <div class="card"><div class="muted">Commandes</div><h2>{{ commands|length }}</h2></div>
+        <div class="card"><div class="muted">Balance totale</div><h2>{{ total_balance }}</h2></div>
     </div>
 </div>
 </body>
@@ -387,29 +284,24 @@ def save_oauth_session(user_id: str, username: str, access_token: str, guilds_ad
     db.close()
 
 
-def get_saved_guilds(user_id: str) -> list[dict]:
+def get_saved_session(user_id: str):
     db = get_db()
     row = db.execute(
-        "SELECT guilds_json FROM oauth_sessions WHERE user_id = ?",
+        "SELECT username, access_token, guilds_json FROM oauth_sessions WHERE user_id = ?",
         (user_id,),
     ).fetchone()
     db.close()
+    return row
 
+
+def get_saved_guilds(user_id: str) -> list[dict]:
+    row = get_saved_session(user_id)
     if not row:
         return []
-
     try:
         return json.loads(row["guilds_json"])
     except (TypeError, json.JSONDecodeError):
         return []
-
-
-def get_login_cooldown_remaining() -> int:
-    started_at = session.get("oauth_started_at")
-    if not started_at:
-        return 0
-    remaining = LOGIN_COOLDOWN_SECONDS - int(time.time() - started_at)
-    return max(0, remaining)
 
 
 init_db()
@@ -424,11 +316,7 @@ def healthz():
 def login():
     if session.get("user_id"):
         return redirect(url_for("dashboard"))
-    return render_template_string(
-        LOGIN_HTML,
-        redirect_uri=REDIRECT_URI,
-        cooldown_remaining=get_login_cooldown_remaining(),
-    )
+    return render_template_string(LOGIN_HTML, redirect_uri=REDIRECT_URI)
 
 
 @app.route("/discord-login")
@@ -436,14 +324,8 @@ def discord_login():
     if session.get("user_id"):
         return redirect(url_for("dashboard"))
 
-    cooldown_remaining = get_login_cooldown_remaining()
-    if cooldown_remaining > 0:
-        flash(f"Patiente encore {cooldown_remaining} seconde(s) avant de relancer la connexion.", "warning")
-        return redirect(url_for("login"))
-
     state = secrets.token_urlsafe(24)
     session["oauth_state"] = state
-    session["oauth_started_at"] = int(time.time())
     session.modified = True
 
     params = {
@@ -490,12 +372,6 @@ def callback():
 
     try:
         token_resp = requests.post(DISCORD_TOKEN_URL, data=data, headers=headers, timeout=15)
-
-        if token_resp.status_code == 429:
-            retry_after = token_resp.headers.get("Retry-After", "quelques")
-            flash(f"Trop de requetes sur Discord. Reessaie dans {retry_after} secondes.", "warning")
-            return redirect(url_for("login"))
-
         token_resp.raise_for_status()
         token_json = token_resp.json()
     except requests.exceptions.HTTPError:
@@ -570,6 +446,11 @@ def dashboard():
     username = session.get("username")
 
     if not user_id or not username:
+        return redirect(url_for("login"))
+
+    saved = get_saved_session(user_id)
+    if not saved:
+        session.clear()
         return redirect(url_for("login"))
 
     guilds = get_saved_guilds(user_id)

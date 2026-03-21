@@ -9,9 +9,9 @@ from flask import Flask, render_template, redirect, request, session, flash
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 app = Flask(__name__, template_folder=os.path.join(BASE_DIR, "templates"))
 
-# ⚡ Session sécurisée
+# ⚡ Session sécurisée pour HTTPS (Render)
 app.secret_key = os.environ.get("SESSION_SECRET", "CHANGE_THIS_SECRET_KEY")
-app.config["SESSION_COOKIE_SECURE"] = True        # HTTPS obligatoire sur Render
+app.config["SESSION_COOKIE_SECURE"] = True
 app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 
@@ -147,12 +147,13 @@ def callback():
                 "name": g["name"]
             })
 
-    session["user"] = {
-        "id": user["id"],
-        "username": user["username"]
-    }
+    # ⚡ Crée la session
+    session["user"] = {"id": user["id"], "username": user["username"]}
     session["guilds"] = guilds_admin
     session["token"] = access_token
+
+    # 🔹 Debug : affiche la session dans les logs Render
+    print("DEBUG SESSION:", dict(session))
 
     return redirect("/")
 

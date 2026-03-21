@@ -6,7 +6,7 @@ from datetime import timedelta
 from urllib.parse import urlencode
 
 import requests
-from flask import Flask, flash, redirect, request, session, url_for, render_template_string
+from flask import Flask, redirect, request, session, url_for, render_template_string
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -22,16 +22,13 @@ app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=7)
 
 CLIENT_ID = os.environ.get("CLIENT_ID")
-CLIENT_SECRET = os.environ.get("CLIENT_SECRET")
 REDIRECT_URI = os.environ.get("REDIRECT_URI")
-
-if not CLIENT_ID or not CLIENT_SECRET or not REDIRECT_URI:
-    raise RuntimeError("OAuth non configure !")
+OAUTH_EXCHANGE_URL = os.environ.get("OAUTH_EXCHANGE_URL")
 
 DISCORD_AUTH_URL = "https://discord.com/api/oauth2/authorize"
-DISCORD_TOKEN_URL = "https://discord.com/api/oauth2/token"
 DISCORD_API_URL = "https://discord.com/api/users/@me"
 DISCORD_GUILDS_URL = "https://discord.com/api/users/@me/guilds"
+
 
 LOGIN_HTML = """
 <!DOCTYPE html>
@@ -90,13 +87,9 @@ LOGIN_HTML = """
         <h1>Connexion au panel</h1>
         <p class="muted">Connecte-toi avec Discord pour acceder au dashboard.</p>
 
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                {% for category, message in messages %}
-                    <div class="msg">{{ message }}</div>
-                {% endfor %}
-            {% endif %}
-        {% endwith %}
+        {% if error %}
+            <div class="msg">{{ error }}</div>
+        {% endif %}
 
         <a class="btn" href="{{ url_for('discord_login') }}">Se connecter avec Discord</a>
 
@@ -364,7 +357,6 @@ def get_saved_guilds(user_id: str) -> list[dict]:
 
 
 def render_oauth_error(message: str, details: str, status_code: int = 400):
-    app.logger.error("%s | %s", message, details)
     return render_template_string(ERROR_HTML, message=message, details=details), status_code
 
 
@@ -380,13 +372,28 @@ def healthz():
 def login():
     if session.get("user_id"):
         return redirect(url_for("dashboard"))
-    return render_template_string(LOGIN_HTML, redirect_uri=REDIRECT_URI)
+
+    if not CLIENT_ID or not REDIRECT_URI or not OAUTH_EXCHANGE_URL:
+        return render_template_string(
+            LOGIN_HTML,
+            redirect_uri=REDIRECT_URI or "REDIRECT_URI manquante",
+            error="Variables manquantes sur Render: CLIENT_ID, REDIRECT_URI ou OAUTH_EXCHANGE_URL",
+        )
+
+    return render_template_string(LOGIN_HTML, redirect_uri=REDIRECT_URI, error=None)
 
 
 @app.route("/discord-login")
 def discord_login():
     if session.get("user_id"):
         return redirect(url_for("dashboard"))
+
+    if not CLIENT_ID or not REDIRECT_URI:
+        return render_oauth_error(
+            "OAuth mal configure sur Render.",
+            "CLIENT_ID ou REDIRECT_URI manquante.",
+            500,
+        )
 
     state = secrets.token_urlsafe(24)
     session["oauth_state"] = state
@@ -411,23 +418,15 @@ def callback():
     expected_state = session.get("oauth_state")
 
     if error:
-        return render_oauth_error(
-            "Discord a renvoye une erreur OAuth.",
-            f"error={error}",
-            400,
-        )
+        return render_oauth_error("Discord a renvoye une erreur OAuth.", f"error={error}", 400)
 
     if not code:
-        return render_oauth_error(
-            "Le callback Discord ne contient pas de code.",
-            f"query={dict(request.args)}",
-            400,
-        )
+        return render_oauth_error("Le callback Discord ne contient pas de code.", str(dict(request.args)), 400)
 
     if not expected_state:
         return render_oauth_error(
             "Le state OAuth n'existe plus dans la session.",
-            "La session navigateur n'a probablement pas ete conservee entre /discord-login et /callback.",
+            "La session n'a probablement pas ete conservee entre /discord-login et /callback.",
             400,
         )
 
@@ -438,53 +437,57 @@ def callback():
             400,
         )
 
-    data = {
-        "client_id": CLIENT_ID,
-        "client_secret": CLIENT_SECRET,
-        "grant_type": "authorization_code",
-        "code": code,
-        "redirect_uri": REDIRECT_URI,
-    }
-
-    headers = {"Content-Type": "application/x-www-form-urlencoded"}
+    if not OAUTH_EXCHANGE_URL:
+        return render_oauth_error(
+            "OAUTH_EXCHANGE_URL manquante.",
+            "Ajoute l'URL du microservice OAuth dans les variables Render.",
+            500,
+        )
 
     try:
-        token_resp = requests.post(DISCORD_TOKEN_URL, data=data, headers=headers, timeout=15)
-        response_text = token_resp.text
+        exchange_resp = requests.post(
+            OAUTH_EXCHANGE_URL,
+            json={
+                "code": code,
+                "redirect_uri": REDIRECT_URI,
+            },
+            timeout=20,
+        )
+        response_text = exchange_resp.text
 
-        if token_resp.status_code == 429:
+        if exchange_resp.status_code == 429:
             return render_oauth_error(
-                "Discord refuse l'echange OAuth avec un 429.",
+                "Le service OAuth a recu un 429 de Discord.",
                 response_text,
                 429,
             )
 
-        token_resp.raise_for_status()
-        token_json = token_resp.json()
+        exchange_resp.raise_for_status()
+        token_json = exchange_resp.json()
 
     except requests.exceptions.HTTPError:
         return render_oauth_error(
-            f"Erreur HTTP Discord {token_resp.status_code}.",
+            f"Erreur HTTP du service OAuth: {exchange_resp.status_code}",
             response_text,
-            token_resp.status_code,
+            exchange_resp.status_code,
         )
     except requests.exceptions.RequestException as exc:
         return render_oauth_error(
-            "Impossible de contacter Discord.",
+            "Impossible de contacter le service OAuth externe.",
             str(exc),
             502,
         )
     except ValueError:
         return render_oauth_error(
-            "Discord a renvoye un JSON invalide pour le token.",
-            token_resp.text if "token_resp" in locals() else "pas de reponse exploitable",
+            "Le service OAuth a renvoye un JSON invalide.",
+            response_text if "response_text" in locals() else "pas de reponse",
             502,
         )
 
     access_token = token_json.get("access_token")
     if not access_token:
         return render_oauth_error(
-            "Discord n'a pas renvoye access_token.",
+            "Le service OAuth n'a pas renvoye access_token.",
             json.dumps(token_json, ensure_ascii=False),
             400,
         )
@@ -499,7 +502,6 @@ def callback():
         guilds_resp = requests.get(DISCORD_GUILDS_URL, headers=auth_headers, timeout=15)
         guilds_resp.raise_for_status()
         guilds = guilds_resp.json()
-
     except requests.exceptions.RequestException as exc:
         return render_oauth_error(
             "Impossible de recuperer le profil ou les serveurs Discord.",
@@ -564,21 +566,9 @@ def dashboard():
     total_balance = 0
 
     if selected_guild:
-        users = db.execute(
-            "SELECT * FROM users WHERE guild_id = ?",
-            (selected_guild,),
-        ).fetchall()
-
-        commands = db.execute(
-            "SELECT * FROM commands WHERE guild_id = ?",
-            (selected_guild,),
-        ).fetchall()
-
-        result = db.execute(
-            "SELECT SUM(balance) AS total FROM users WHERE guild_id = ?",
-            (selected_guild,),
-        ).fetchone()
-
+        users = db.execute("SELECT * FROM users WHERE guild_id = ?", (selected_guild,)).fetchall()
+        commands = db.execute("SELECT * FROM commands WHERE guild_id = ?", (selected_guild,)).fetchall()
+        result = db.execute("SELECT SUM(balance) AS total FROM users WHERE guild_id = ?", (selected_guild,)).fetchone()
         total_balance = result["total"] if result and result["total"] else 0
 
     db.close()

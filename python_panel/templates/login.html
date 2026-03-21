@@ -1,35 +1,21 @@
-{% extends "base.html" %}
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Connexion Discord</title>
+</head>
+<body>
+  <h1>Connexion</h1>
 
-{% block title %}Connexion Admin{% endblock %}
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      {% for category, message in messages %}
+        <p>{{ message }}</p>
+      {% endfor %}
+    {% endif %}
+  {% endwith %}
 
-{% block body %}
-<main class="login-page">
-  <section class="login-card">
-    <p class="eyebrow">Panel web Python</p>
-    <h1>Connexion admin</h1>
-    <p class="muted-copy">Connecte-toi pour acceder au dashboard Discord et a l'etat de ton bot.</p>
-
-    {% with messages = get_flashed_messages(with_categories=true) %}
-      {% if messages %}
-        <div class="alert error">
-          {% for _, message in messages %}
-            <p>{{ message }}</p>
-          {% endfor %}
-        </div>
-      {% endif %}
-    {% endwith %}
-
-    <form method="post" class="login-form">
-      <label>
-        <span>Identifiant</span>
-        <input type="text" name="username" placeholder="admin" required>
-      </label>
-      <label>
-        <span>Mot de passe</span>
-        <input type="password" name="password" placeholder="********" required>
-      </label>
-      <button type="submit" class="primary-btn">Entrer dans le panel</button>
-    </form>
-  </section>
-</main>
-{% endblock %}
+  <a href="{{ url_for('discord_login') }}">Se connecter avec Discord</a>
+</body>
+</html>

@@ -8,14 +8,16 @@ import requests
 from dotenv import load_dotenv
 from flask import Flask, flash, redirect, render_template, request, session, url_for
 
+# Charger .env AVANT d'utiliser os.getenv
+load_dotenv()
+
 OAUTH_CLIENT_ID = os.getenv("OAUTH_CLIENT_ID")
 OAUTH_CLIENT_SECRET = os.getenv("OAUTH_CLIENT_SECRET")
 
 if not OAUTH_CLIENT_ID or not OAUTH_CLIENT_SECRET:
     print("⚠️ OAuth non configuré (mode dev)")
-    import os
-print("CLIENT_ID =", os.getenv("OAUTH_CLIENT_ID"))
-load_dotenv()
+
+
 def create_app() -> Flask:
     app = Flask(__name__)
     app.config["SECRET_KEY"] = os.getenv("FLASK_SECRET_KEY", "change-me")
@@ -64,7 +66,7 @@ def create_app() -> Flask:
         }
 
         if not token or not guild_id:
-            overview["error"] = "Ajoute DISCORD_BOT_TOKEN et DISCORD_GUILD_ID dans ton fichier .env."
+            overview["error"] = "Ajoute DISCORD_BOT_TOKEN et DISCORD_GUILD_ID dans ton .env."
             return overview
 
         try:
@@ -136,6 +138,7 @@ def create_app() -> Flask:
 
 app = create_app()
 
-
+# ⚠️ IMPORTANT pour Render
 if __name__ == "__main__":
-    app.run(debug=True)
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)

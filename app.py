@@ -19,7 +19,7 @@ CLIENT_SECRET = os.environ.get("CLIENT_SECRET")
 REDIRECT_URI = os.environ.get("REDIRECT_URI")
 
 if not CLIENT_ID or not CLIENT_SECRET or not REDIRECT_URI:
-    raise RuntimeError("⚠️ Variables OAuth manquantes !")
+    raise RuntimeError("Variables OAuth manquantes !")
 
 DISCORD_AUTH_URL = "https://discord.com/api/oauth2/authorize"
 DISCORD_TOKEN_URL = "https://discord.com/api/oauth2/token"
@@ -67,7 +67,6 @@ def init_db():
     db.commit()
     db.close()
 
-# ⚠️ IMPORTANT : on initialise la DB au chargement du module
 init_db()
 
 # ==============================
@@ -99,54 +98,38 @@ def callback():
 
     try:
         token_resp = requests.post(DISCORD_TOKEN_URL, data=data, headers=headers, timeout=10)
-        token_resp.raise_for_status()  # Vérifie que la réponse HTTP est OK
-    except requests.RequestException as e:
-        return f"Erreur OAuth Discord: impossible de contacter l'API ({e})", 500
-
-    # ⚠️ Vérification JSON
-    try:
+        token_resp.raise_for_status()
         token_json = token_resp.json()
+    except requests.exceptions.HTTPError as e:
+        if token_resp.status_code == 429:
+            return ("⚠️ Trop de requêtes sur Discord. "
+                    "Ton IP est temporairement bloquée. "
+                    "Réessaie dans quelques minutes."), 429
+        return f"Erreur OAuth Discord: impossible de contacter l'API ({e})", 500
+    except requests.exceptions.RequestException as e:
+        return f"Erreur réseau Discord: {e}", 500
     except ValueError:
-        # On reçoit du HTML (ex: Cloudflare rate limit), pas du JSON
-        return ("Erreur OAuth Discord: réponse invalide (probablement rate-limited par Cloudflare). "
-                "Réessayez plus tard."), 429
+        return "Erreur JSON Discord : réponse invalide", 500
 
     if "access_token" not in token_json:
-        return f"Erreur OAuth Discord: token invalide ({token_json})", 400
+        flash("Erreur OAuth : token invalide", "danger")
+        return redirect("/login")
 
     access_token = token_json["access_token"]
 
-    # Récupération user
     try:
-        user = requests.get(
-            DISCORD_API_URL,
-            headers={"Authorization": f"Bearer {access_token}"}
-        ).json()
-    except ValueError:
-        return "Erreur OAuth Discord: impossible de récupérer l'utilisateur", 500
-
-    # Récupération guilds
-    try:
-        guilds_resp = requests.get(
-            DISCORD_GUILDS_URL,
-            headers={"Authorization": f"Bearer {access_token}"}
-        ).json()
-    except ValueError:
-        guilds_resp = []
+        user = requests.get(DISCORD_API_URL, headers={"Authorization": f"Bearer {access_token}"}, timeout=10).json()
+        guilds_resp = requests.get(DISCORD_GUILDS_URL, headers={"Authorization": f"Bearer {access_token}"}, timeout=10).json()
+    except requests.exceptions.RequestException:
+        return "Impossible de récupérer les infos utilisateur depuis Discord", 500
 
     guilds_admin = []
     for g in guilds_resp:
         permissions = int(g.get("permissions", 0))
         if permissions & 0x8:
-            guilds_admin.append({
-                "id": g["id"],
-                "name": g["name"]
-            })
+            guilds_admin.append({"id": g["id"], "name": g["name"]})
 
-    session["user"] = {
-        "id": user["id"],
-        "username": user["username"]
-    }
+    session["user"] = {"id": user.get("id"), "username": user.get("username")}
     session["guilds"] = guilds_admin
     session["token"] = access_token
 
@@ -173,21 +156,9 @@ def dashboard():
     total_balance = 0
 
     if selected_guild:
-        users = db.execute(
-            "SELECT * FROM users WHERE guild_id=?",
-            (selected_guild,)
-        ).fetchall()
-
-        commands = db.execute(
-            "SELECT * FROM commands WHERE guild_id=?",
-            (selected_guild,)
-        ).fetchall()
-
-        result = db.execute(
-            "SELECT SUM(balance) FROM users WHERE guild_id=?",
-            (selected_guild,)
-        ).fetchone()
-
+        users = db.execute("SELECT * FROM users WHERE guild_id=?", (selected_guild,)).fetchall()
+        commands = db.execute("SELECT * FROM commands WHERE guild_id=?", (selected_guild,)).fetchall()
+        result = db.execute("SELECT SUM(balance) FROM users WHERE guild_id=?", (selected_guild,)).fetchone()
         total_balance = result[0] if result and result[0] else 0
 
     db.close()
@@ -217,23 +188,14 @@ def toggle_command_ajax():
         return {"success": False}
 
     db = get_db()
-
-    cmd = db.execute(
-        "SELECT enabled FROM commands WHERE id=?",
-        (command_id,)
-    ).fetchone()
+    cmd = db.execute("SELECT enabled FROM commands WHERE id=?", (command_id,)).fetchone()
 
     if not cmd:
         db.close()
         return {"success": False}
 
     new_state = 0 if cmd["enabled"] else 1
-
-    db.execute(
-        "UPDATE commands SET enabled=? WHERE id=?",
-        (new_state, command_id)
-    )
-
+    db.execute("UPDATE commands SET enabled=? WHERE id=?", (new_state, command_id))
     db.commit()
     db.close()
 

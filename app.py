@@ -19,7 +19,7 @@ CLIENT_SECRET = os.environ.get("CLIENT_SECRET")
 REDIRECT_URI = os.environ.get("REDIRECT_URI")
 
 if not CLIENT_ID or not CLIENT_SECRET or not REDIRECT_URI:
-    raise RuntimeError("Variables OAuth manquantes !")
+    raise RuntimeError("⚠️ OAuth non configuré !")
 
 DISCORD_AUTH_URL = "https://discord.com/api/oauth2/authorize"
 DISCORD_TOKEN_URL = "https://discord.com/api/oauth2/token"
@@ -67,6 +67,7 @@ def init_db():
     db.commit()
     db.close()
 
+# ⚠️ Initialise la DB au lancement
 init_db()
 
 # ==============================
@@ -94,22 +95,24 @@ def callback():
         "code": code,
         "redirect_uri": REDIRECT_URI
     }
-    headers = {"Content-Type": "application/x-www-form-urlencoded"}
 
+    headers = {"Content-Type": "application/x-www-form-urlencoded"}
     try:
         token_resp = requests.post(DISCORD_TOKEN_URL, data=data, headers=headers, timeout=10)
-        token_resp.raise_for_status()
+        token_resp.raise_for_status()  # déclenche exception pour HTTP 4xx ou 5xx
         token_json = token_resp.json()
     except requests.exceptions.HTTPError as e:
         if token_resp.status_code == 429:
-            return ("⚠️ Trop de requêtes sur Discord. "
-                    "Ton IP est temporairement bloquée. "
-                    "Réessaie dans quelques minutes."), 429
-        return f"Erreur OAuth Discord: impossible de contacter l'API ({e})", 500
-    except requests.exceptions.RequestException as e:
-        return f"Erreur réseau Discord: {e}", 500
+            flash("⚠️ Trop de requêtes sur Discord. Réessaie dans quelques minutes.", "warning")
+        else:
+            flash(f"Erreur OAuth Discord: {token_resp.status_code}", "danger")
+        return redirect("/login")
+    except requests.exceptions.RequestException:
+        flash("⚠️ Impossible de contacter l'API Discord.", "danger")
+        return redirect("/login")
     except ValueError:
-        return "Erreur JSON Discord : réponse invalide", 500
+        flash("⚠️ Réponse invalide de l'API Discord.", "danger")
+        return redirect("/login")
 
     if "access_token" not in token_json:
         flash("Erreur OAuth : token invalide", "danger")
@@ -118,18 +121,33 @@ def callback():
     access_token = token_json["access_token"]
 
     try:
-        user = requests.get(DISCORD_API_URL, headers={"Authorization": f"Bearer {access_token}"}, timeout=10).json()
-        guilds_resp = requests.get(DISCORD_GUILDS_URL, headers={"Authorization": f"Bearer {access_token}"}, timeout=10).json()
+        user_resp = requests.get(DISCORD_API_URL, headers={"Authorization": f"Bearer {access_token}"}, timeout=10)
+        user_resp.raise_for_status()
+        user = user_resp.json()
+
+        guilds_resp = requests.get(DISCORD_GUILDS_URL, headers={"Authorization": f"Bearer {access_token}"}, timeout=10)
+        guilds_resp.raise_for_status()
+        guilds = guilds_resp.json()
     except requests.exceptions.RequestException:
-        return "Impossible de récupérer les infos utilisateur depuis Discord", 500
+        flash("⚠️ Impossible de récupérer tes informations Discord.", "danger")
+        return redirect("/login")
+    except ValueError:
+        flash("⚠️ Réponse invalide de l'API Discord.", "danger")
+        return redirect("/login")
 
     guilds_admin = []
-    for g in guilds_resp:
+    for g in guilds:
         permissions = int(g.get("permissions", 0))
         if permissions & 0x8:
-            guilds_admin.append({"id": g["id"], "name": g["name"]})
+            guilds_admin.append({
+                "id": g["id"],
+                "name": g["name"]
+            })
 
-    session["user"] = {"id": user.get("id"), "username": user.get("username")}
+    session["user"] = {
+        "id": user.get("id"),
+        "username": user.get("username")
+    }
     session["guilds"] = guilds_admin
     session["token"] = access_token
 
@@ -183,13 +201,11 @@ def toggle_command_ajax():
 
     data = request.get_json()
     command_id = data.get("command_id")
-
     if not command_id:
         return {"success": False}
 
     db = get_db()
     cmd = db.execute("SELECT enabled FROM commands WHERE id=?", (command_id,)).fetchone()
-
     if not cmd:
         db.close()
         return {"success": False}

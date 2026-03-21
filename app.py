@@ -18,8 +18,9 @@ CLIENT_ID = os.environ.get("CLIENT_ID")
 CLIENT_SECRET = os.environ.get("CLIENT_SECRET")
 REDIRECT_URI = os.environ.get("REDIRECT_URI")
 
+# ⚠️ NE PLUS CRASH
 if not CLIENT_ID or not CLIENT_SECRET or not REDIRECT_URI:
-    raise RuntimeError("Variables OAuth manquantes !")
+    print("⚠️ Variables OAuth manquantes ! (mode dev)")
 
 DISCORD_AUTH_URL = "https://discord.com/api/oauth2/authorize"
 DISCORD_TOKEN_URL = "https://discord.com/api/oauth2/token"
@@ -71,7 +72,6 @@ def init_db():
     db.commit()
     db.close()
 
-# ⚠️ IMPORTANT : on initialise la DB au chargement du module
 init_db()
 
 # ==============================
@@ -79,6 +79,10 @@ init_db()
 # ==============================
 @app.route("/login")
 def login():
+    if not CLIENT_ID or not REDIRECT_URI:
+        flash("OAuth non configuré", "danger")
+        return redirect("/")
+
     return redirect(
         f"{DISCORD_AUTH_URL}?client_id={CLIENT_ID}"
         f"&redirect_uri={REDIRECT_URI}"
@@ -87,6 +91,10 @@ def login():
 
 @app.route("/callback")
 def callback():
+    if not CLIENT_ID or not CLIENT_SECRET or not REDIRECT_URI:
+        flash("OAuth non configuré", "danger")
+        return redirect("/")
+
     code = request.args.get("code")
     if not code:
         flash("Erreur OAuth : code manquant", "danger")
@@ -180,7 +188,7 @@ def dashboard():
 
     return render_template(
         "dashboard.html",
-        user=session["user"],
+        user=session.get("user"),
         guilds=session.get("guilds", []),
         selected_guild=selected_guild,
         users=users,
@@ -226,8 +234,8 @@ def toggle_command_ajax():
     return {"success": True, "new_state": new_state}
 
 # ==============================
-# RUN LOCAL ONLY
+# RUN
 # ==============================
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port, debug=True)
+    app.run(host="0.0.0.0", port=port)

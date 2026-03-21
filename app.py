@@ -19,7 +19,7 @@ CLIENT_SECRET = os.environ.get("CLIENT_SECRET")
 REDIRECT_URI = os.environ.get("REDIRECT_URI")
 
 if not CLIENT_ID or not CLIENT_SECRET or not REDIRECT_URI:
-    print("⚠️ Variables OAuth manquantes ! (mode dev)")
+    print("⚠️ OAuth non configuré (Render variables manquantes)")
 
 DISCORD_AUTH_URL = "https://discord.com/api/oauth2/authorize"
 DISCORD_TOKEN_URL = "https://discord.com/api/oauth2/token"
@@ -36,7 +36,6 @@ def get_db():
 
 def init_db():
     db = get_db()
-
     db.execute("""
     CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -49,7 +48,6 @@ def init_db():
         UNIQUE(guild_id, user_id)
     )
     """)
-
     db.execute("""
     CREATE TABLE IF NOT EXISTS commands (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -60,14 +58,12 @@ def init_db():
         enabled INTEGER DEFAULT 1
     )
     """)
-
     db.execute("""
     CREATE TABLE IF NOT EXISTS guild_settings (
         guild_id TEXT PRIMARY KEY,
         leveling_enabled INTEGER DEFAULT 1
     )
     """)
-
     db.commit()
     db.close()
 
@@ -78,9 +74,8 @@ init_db()
 # ==============================
 @app.route("/login")
 def login():
-    if not CLIENT_ID or not REDIRECT_URI:
-        return "⚠️ OAuth non configuré. Ajoute CLIENT_ID et REDIRECT_URI sur Render."
-
+    if not CLIENT_ID or not CLIENT_SECRET or not REDIRECT_URI:
+        return "⚠️ OAuth non configuré. Vérifie tes variables Render."
     return redirect(
         f"{DISCORD_AUTH_URL}?client_id={CLIENT_ID}"
         f"&redirect_uri={REDIRECT_URI}"
@@ -90,7 +85,7 @@ def login():
 @app.route("/callback")
 def callback():
     if not CLIENT_ID or not CLIENT_SECRET or not REDIRECT_URI:
-        return "⚠️ OAuth non configuré."
+        return "⚠️ OAuth non configuré. Vérifie tes variables Render."
 
     code = request.args.get("code")
     if not code:
@@ -107,37 +102,47 @@ def callback():
 
     headers = {"Content-Type": "application/x-www-form-urlencoded"}
     token_resp = requests.post(DISCORD_TOKEN_URL, data=data, headers=headers)
-    token_json = token_resp.json()
 
-    if "access_token" not in token_json:
-        flash("Erreur OAuth : token invalide", "danger")
-        return redirect("/login")
+    # ✅ Vérifier que Discord a répondu correctement
+    if token_resp.status_code != 200:
+        return f"Erreur OAuth Discord: {token_resp.status_code} - {token_resp.text}"
 
-    access_token = token_json["access_token"]
+    if not token_resp.text:
+        return f"Erreur OAuth Discord: réponse vide - vérifie CLIENT_ID, CLIENT_SECRET et REDIRECT_URI"
 
-    user = requests.get(
-        DISCORD_API_URL,
-        headers={"Authorization": f"Bearer {access_token}"}
-    ).json()
+    try:
+        token_json = token_resp.json()
+    except ValueError:
+        return f"Erreur OAuth Discord: réponse non JSON - {token_resp.text}"
 
-    guilds_resp = requests.get(
-        DISCORD_GUILDS_URL,
-        headers={"Authorization": f"Bearer {access_token}"}
-    ).json()
+    access_token = token_json.get("access_token")
+    if not access_token:
+        return f"Erreur OAuth Discord: access_token manquant - {token_json}"
+
+    # ✅ Sécuriser la récupération user
+    user_resp = requests.get(DISCORD_API_URL, headers={"Authorization": f"Bearer {access_token}"})
+    if user_resp.status_code != 200:
+        return f"Erreur récupération user Discord: {user_resp.status_code} - {user_resp.text}"
+    try:
+        user = user_resp.json()
+    except ValueError:
+        return f"Erreur JSON user Discord: {user_resp.text}"
+
+    guilds_resp = requests.get(DISCORD_GUILDS_URL, headers={"Authorization": f"Bearer {access_token}"})
+    if guilds_resp.status_code != 200:
+        return f"Erreur récupération guilds Discord: {guilds_resp.status_code} - {guilds_resp.text}"
+    try:
+        guilds = guilds_resp.json()
+    except ValueError:
+        return f"Erreur JSON guilds Discord: {guilds_resp.text}"
 
     guilds_admin = []
-    for g in guilds_resp:
+    for g in guilds:
         permissions = int(g.get("permissions", 0))
-        if permissions & 0x8:
-            guilds_admin.append({
-                "id": g["id"],
-                "name": g["name"]
-            })
+        if permissions & 0x8:  # admin
+            guilds_admin.append({"id": g["id"], "name": g["name"]})
 
-    session["user"] = {
-        "id": user["id"],
-        "username": user["username"]
-    }
+    session["user"] = {"id": user.get("id"), "username": user.get("username")}
     session["guilds"] = guilds_admin
     session["token"] = access_token
 
@@ -153,9 +158,7 @@ def logout():
 # ==============================
 @app.route("/", methods=["GET"])
 def dashboard():
-    if "user" not in session:
-        if not CLIENT_ID:
-            return "⚠️ OAuth non configuré"
+    if not session.get("user"):
         return redirect("/login")
 
     selected_guild = request.args.get("guild_id")
@@ -166,28 +169,16 @@ def dashboard():
     total_balance = 0
 
     if selected_guild:
-        users = db.execute(
-            "SELECT * FROM users WHERE guild_id=?",
-            (selected_guild,)
-        ).fetchall()
-
-        commands = db.execute(
-            "SELECT * FROM commands WHERE guild_id=?",
-            (selected_guild,)
-        ).fetchall()
-
-        result = db.execute(
-            "SELECT SUM(balance) FROM users WHERE guild_id=?",
-            (selected_guild,)
-        ).fetchone()
-
+        users = db.execute("SELECT * FROM users WHERE guild_id=?", (selected_guild,)).fetchall()
+        commands = db.execute("SELECT * FROM commands WHERE guild_id=?", (selected_guild,)).fetchall()
+        result = db.execute("SELECT SUM(balance) FROM users WHERE guild_id=?", (selected_guild,)).fetchone()
         total_balance = result[0] if result and result[0] else 0
 
     db.close()
 
     return render_template(
         "dashboard.html",
-        user=session.get("user"),
+        user=session["user"],
         guilds=session.get("guilds", []),
         selected_guild=selected_guild,
         users=users,
@@ -200,41 +191,30 @@ def dashboard():
 # ==============================
 @app.route("/toggle_command_ajax", methods=["POST"])
 def toggle_command_ajax():
-    if "user" not in session:
+    if not session.get("user"):
         return {"success": False}
 
     data = request.get_json()
     command_id = data.get("command_id")
-
     if not command_id:
         return {"success": False}
 
     db = get_db()
-
-    cmd = db.execute(
-        "SELECT enabled FROM commands WHERE id=?",
-        (command_id,)
-    ).fetchone()
-
+    cmd = db.execute("SELECT enabled FROM commands WHERE id=?", (command_id,)).fetchone()
     if not cmd:
         db.close()
         return {"success": False}
 
     new_state = 0 if cmd["enabled"] else 1
-
-    db.execute(
-        "UPDATE commands SET enabled=? WHERE id=?",
-        (new_state, command_id)
-    )
-
+    db.execute("UPDATE commands SET enabled=? WHERE id=?", (new_state, command_id))
     db.commit()
     db.close()
 
     return {"success": True, "new_state": new_state}
 
 # ==============================
-# RUN
+# RUN LOCAL / RENDER
 # ==============================
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
+    app.run(host="0.0.0.0", port=port, debug=True)

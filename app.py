@@ -9,13 +9,11 @@ from flask import Flask, render_template, redirect, request, session, flash
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 app = Flask(__name__, template_folder=os.path.join(BASE_DIR, "templates"))
 
-# SECRET_KEY pour Flask session (doit être constant)
+# ⚡ Session sécurisée
 app.secret_key = os.environ.get("SESSION_SECRET", "CHANGE_THIS_SECRET_KEY")
-
-# Cookies sécurisés pour Render HTTPS
-app.config["SESSION_COOKIE_SECURE"] = True
-app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+app.config["SESSION_COOKIE_SECURE"] = True        # HTTPS obligatoire sur Render
 app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 
 DATABASE = os.path.join(BASE_DIR, "main_database.db")
 
@@ -24,10 +22,10 @@ DATABASE = os.path.join(BASE_DIR, "main_database.db")
 # ==============================
 CLIENT_ID = os.environ.get("CLIENT_ID")
 CLIENT_SECRET = os.environ.get("CLIENT_SECRET")
-REDIRECT_URI = os.environ.get("REDIRECT_URI")  # Exemple : https://ton-app.onrender.com/callback
+REDIRECT_URI = os.environ.get("REDIRECT_URI")
 
 if not CLIENT_ID or not CLIENT_SECRET or not REDIRECT_URI:
-    raise RuntimeError("⚠️ Variables OAuth manquantes !")
+    raise RuntimeError("⚠️ Variables OAuth manquantes ! Vérifie CLIENT_ID, CLIENT_SECRET et REDIRECT_URI")
 
 DISCORD_AUTH_URL = "https://discord.com/api/oauth2/authorize"
 DISCORD_TOKEN_URL = "https://discord.com/api/oauth2/token"
@@ -75,16 +73,13 @@ def init_db():
     db.commit()
     db.close()
 
-init_db()  # Initialise la DB au démarrage
+init_db()
 
 # ==============================
 # LOGIN / OAUTH2
 # ==============================
 @app.route("/login")
 def login():
-    # Si déjà loggué, redirige vers le dashboard
-    if "user" in session:
-        return redirect("/")
     return redirect(
         f"{DISCORD_AUTH_URL}?client_id={CLIENT_ID}"
         f"&redirect_uri={REDIRECT_URI}"
@@ -111,49 +106,51 @@ def callback():
         token_resp = requests.post(DISCORD_TOKEN_URL, data=data, headers=headers, timeout=10)
         token_resp.raise_for_status()
         token_json = token_resp.json()
-    except requests.exceptions.HTTPError as e:
-        if token_resp.status_code == 429:
-            flash("⚠️ Trop de requêtes vers Discord. Réessaye dans quelques minutes.", "warning")
-        else:
-            flash(f"Erreur OAuth HTTP: {token_resp.status_code}", "danger")
-        return redirect("/login")
     except requests.exceptions.RequestException as e:
-        flash(f"Erreur réseau OAuth: {e}", "danger")
+        flash(f"Erreur OAuth : {e}", "danger")
         return redirect("/login")
     except ValueError:
-        flash("Erreur OAuth: réponse Discord invalide.", "danger")
+        flash("Erreur OAuth : réponse Discord invalide", "danger")
         return redirect("/login")
 
     access_token = token_json.get("access_token")
     if not access_token:
-        flash("Erreur OAuth : token manquant", "danger")
+        flash("Erreur OAuth : token invalide", "danger")
         return redirect("/login")
 
     # Récupération des infos utilisateur
     try:
-        user_resp = requests.get(DISCORD_API_URL, headers={"Authorization": f"Bearer {access_token}"}, timeout=10)
-        user_resp.raise_for_status()
-        user = user_resp.json()
+        user = requests.get(
+            DISCORD_API_URL,
+            headers={"Authorization": f"Bearer {access_token}"},
+            timeout=10
+        ).json()
 
-        guilds_resp = requests.get(DISCORD_GUILDS_URL, headers={"Authorization": f"Bearer {access_token}"}, timeout=10)
-        guilds_resp.raise_for_status()
-        guilds = guilds_resp.json()
+        guilds_resp = requests.get(
+            DISCORD_GUILDS_URL,
+            headers={"Authorization": f"Bearer {access_token}"},
+            timeout=10
+        ).json()
     except requests.exceptions.RequestException as e:
-        flash(f"Impossible de récupérer les infos Discord: {e}", "danger")
+        flash(f"Erreur connexion Discord : {e}", "danger")
         return redirect("/login")
     except ValueError:
-        flash("Réponse JSON Discord invalide.", "danger")
+        flash("Erreur réponse Discord", "danger")
         return redirect("/login")
 
-    # Filtrer les guildes où l'utilisateur est admin
     guilds_admin = []
-    for g in guilds:
+    for g in guilds_resp:
         permissions = int(g.get("permissions", 0))
         if permissions & 0x8:
-            guilds_admin.append({"id": g["id"], "name": g["name"]})
+            guilds_admin.append({
+                "id": g["id"],
+                "name": g["name"]
+            })
 
-    # Stockage session
-    session["user"] = {"id": user["id"], "username": user["username"]}
+    session["user"] = {
+        "id": user["id"],
+        "username": user["username"]
+    }
     session["guilds"] = guilds_admin
     session["token"] = access_token
 
@@ -174,12 +171,24 @@ def dashboard():
 
     selected_guild = request.args.get("guild_id")
     db = get_db()
-    users, commands, total_balance = [], [], 0
+
+    users = []
+    commands = []
+    total_balance = 0
 
     if selected_guild:
-        users = db.execute("SELECT * FROM users WHERE guild_id=?", (selected_guild,)).fetchall()
-        commands = db.execute("SELECT * FROM commands WHERE guild_id=?", (selected_guild,)).fetchall()
-        result = db.execute("SELECT SUM(balance) FROM users WHERE guild_id=?", (selected_guild,)).fetchone()
+        users = db.execute(
+            "SELECT * FROM users WHERE guild_id=?",
+            (selected_guild,)
+        ).fetchall()
+        commands = db.execute(
+            "SELECT * FROM commands WHERE guild_id=?",
+            (selected_guild,)
+        ).fetchall()
+        result = db.execute(
+            "SELECT SUM(balance) FROM users WHERE guild_id=?",
+            (selected_guild,)
+        ).fetchone()
         total_balance = result[0] if result and result[0] else 0
 
     db.close()
@@ -208,16 +217,22 @@ def toggle_command_ajax():
         return {"success": False}
 
     db = get_db()
-    cmd = db.execute("SELECT enabled FROM commands WHERE id=?", (command_id,)).fetchone()
+    cmd = db.execute(
+        "SELECT enabled FROM commands WHERE id=?",
+        (command_id,)
+    ).fetchone()
+
     if not cmd:
         db.close()
         return {"success": False}
 
     new_state = 0 if cmd["enabled"] else 1
-    db.execute("UPDATE commands SET enabled=? WHERE id=?", (new_state, command_id))
+    db.execute(
+        "UPDATE commands SET enabled=? WHERE id=?",
+        (new_state, command_id)
+    )
     db.commit()
     db.close()
-
     return {"success": True, "new_state": new_state}
 
 # ==============================

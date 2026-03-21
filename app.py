@@ -1,6 +1,8 @@
 import json
 import os
+import secrets
 import sqlite3
+import time
 from datetime import timedelta
 from urllib.parse import urlencode
 
@@ -32,87 +34,7 @@ DISCORD_TOKEN_URL = "https://discord.com/api/oauth2/token"
 DISCORD_API_URL = "https://discord.com/api/users/@me"
 DISCORD_GUILDS_URL = "https://discord.com/api/users/@me/guilds"
 
-
-def get_db():
-    conn = sqlite3.connect(DATABASE, timeout=10)
-    conn.row_factory = sqlite3.Row
-    return conn
-
-
-def init_db():
-    db = get_db()
-    db.execute("""
-    CREATE TABLE IF NOT EXISTS users (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        guild_id TEXT,
-        user_id TEXT,
-        username TEXT,
-        xp INTEGER DEFAULT 0,
-        level INTEGER DEFAULT 1,
-        balance INTEGER DEFAULT 0,
-        UNIQUE(guild_id, user_id)
-    )
-    """)
-    db.execute("""
-    CREATE TABLE IF NOT EXISTS commands (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        guild_id TEXT,
-        name TEXT,
-        category TEXT,
-        description TEXT,
-        enabled INTEGER DEFAULT 1
-    )
-    """)
-    db.execute("""
-    CREATE TABLE IF NOT EXISTS guild_settings (
-        guild_id TEXT PRIMARY KEY,
-        leveling_enabled INTEGER DEFAULT 1
-    )
-    """)
-    db.execute("""
-    CREATE TABLE IF NOT EXISTS oauth_sessions (
-        user_id TEXT PRIMARY KEY,
-        username TEXT,
-        access_token TEXT NOT NULL,
-        guilds_json TEXT NOT NULL
-    )
-    """)
-    db.commit()
-    db.close()
-
-
-def save_oauth_session(user_id: str, username: str, access_token: str, guilds_admin: list[dict]):
-    db = get_db()
-    db.execute("""
-        INSERT INTO oauth_sessions (user_id, username, access_token, guilds_json)
-        VALUES (?, ?, ?, ?)
-        ON CONFLICT(user_id) DO UPDATE SET
-            username = excluded.username,
-            access_token = excluded.access_token,
-            guilds_json = excluded.guilds_json
-    """, (user_id, username, access_token, json.dumps(guilds_admin)))
-    db.commit()
-    db.close()
-
-
-def get_saved_guilds(user_id: str) -> list[dict]:
-    db = get_db()
-    row = db.execute(
-        "SELECT guilds_json FROM oauth_sessions WHERE user_id = ?",
-        (user_id,),
-    ).fetchone()
-    db.close()
-
-    if not row:
-        return []
-
-    try:
-        return json.loads(row["guilds_json"])
-    except (TypeError, json.JSONDecodeError):
-        return []
-
-
-init_db()
+LOGIN_COOLDOWN_SECONDS = 15
 
 LOGIN_HTML = """
 <!DOCTYPE html>
@@ -149,6 +71,10 @@ LOGIN_HTML = """
             text-decoration: none;
             font-weight: bold;
         }
+        .btn.disabled {
+            opacity: .55;
+            pointer-events: none;
+        }
         .msg {
             margin: 10px 0;
             padding: 10px 12px;
@@ -179,7 +105,11 @@ LOGIN_HTML = """
             {% endif %}
         {% endwith %}
 
-        <a class="btn" href="{{ url_for('discord_login') }}">Se connecter avec Discord</a>
+        {% if cooldown_remaining > 0 %}
+            <a class="btn disabled" href="#">Patiente {{ cooldown_remaining }} seconde(s)</a>
+        {% else %}
+            <a class="btn" href="{{ url_for('discord_login') }}">Se connecter avec Discord</a>
+        {% endif %}
 
         <p class="muted" style="margin-top:16px;">
             Redirect URI attendue :
@@ -384,6 +314,97 @@ DASHBOARD_HTML = """
 """
 
 
+def get_db():
+    conn = sqlite3.connect(DATABASE, timeout=10)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def init_db():
+    db = get_db()
+    db.execute("""
+    CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        guild_id TEXT,
+        user_id TEXT,
+        username TEXT,
+        xp INTEGER DEFAULT 0,
+        level INTEGER DEFAULT 1,
+        balance INTEGER DEFAULT 0,
+        UNIQUE(guild_id, user_id)
+    )
+    """)
+    db.execute("""
+    CREATE TABLE IF NOT EXISTS commands (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        guild_id TEXT,
+        name TEXT,
+        category TEXT,
+        description TEXT,
+        enabled INTEGER DEFAULT 1
+    )
+    """)
+    db.execute("""
+    CREATE TABLE IF NOT EXISTS guild_settings (
+        guild_id TEXT PRIMARY KEY,
+        leveling_enabled INTEGER DEFAULT 1
+    )
+    """)
+    db.execute("""
+    CREATE TABLE IF NOT EXISTS oauth_sessions (
+        user_id TEXT PRIMARY KEY,
+        username TEXT,
+        access_token TEXT NOT NULL,
+        guilds_json TEXT NOT NULL
+    )
+    """)
+    db.commit()
+    db.close()
+
+
+def save_oauth_session(user_id: str, username: str, access_token: str, guilds_admin: list[dict]):
+    db = get_db()
+    db.execute("""
+        INSERT INTO oauth_sessions (user_id, username, access_token, guilds_json)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(user_id) DO UPDATE SET
+            username = excluded.username,
+            access_token = excluded.access_token,
+            guilds_json = excluded.guilds_json
+    """, (user_id, username, access_token, json.dumps(guilds_admin)))
+    db.commit()
+    db.close()
+
+
+def get_saved_guilds(user_id: str) -> list[dict]:
+    db = get_db()
+    row = db.execute(
+        "SELECT guilds_json FROM oauth_sessions WHERE user_id = ?",
+        (user_id,),
+    ).fetchone()
+    db.close()
+
+    if not row:
+        return []
+
+    try:
+        return json.loads(row["guilds_json"])
+    except (TypeError, json.JSONDecodeError):
+        return []
+
+
+def get_login_cooldown_remaining() -> int:
+    started_at = session.get("oauth_started_at")
+    if not started_at:
+        return 0
+
+    remaining = LOGIN_COOLDOWN_SECONDS - int(time.time() - started_at)
+    return max(0, remaining)
+
+
+init_db()
+
+
 @app.route("/healthz")
 def healthz():
     return {"ok": True}, 200
@@ -393,16 +414,35 @@ def healthz():
 def login():
     if session.get("user_id"):
         return redirect(url_for("dashboard"))
-    return render_template_string(LOGIN_HTML, redirect_uri=REDIRECT_URI)
+
+    return render_template_string(
+        LOGIN_HTML,
+        redirect_uri=REDIRECT_URI,
+        cooldown_remaining=get_login_cooldown_remaining(),
+    )
 
 
 @app.route("/discord-login")
 def discord_login():
+    if session.get("user_id"):
+        return redirect(url_for("dashboard"))
+
+    cooldown_remaining = get_login_cooldown_remaining()
+    if cooldown_remaining > 0:
+        flash(f"Patiente encore {cooldown_remaining} seconde(s) avant de relancer la connexion.", "warning")
+        return redirect(url_for("login"))
+
+    state = secrets.token_urlsafe(24)
+    session["oauth_state"] = state
+    session["oauth_started_at"] = int(time.time())
+    session.modified = True
+
     params = {
         "client_id": CLIENT_ID,
         "redirect_uri": REDIRECT_URI,
         "response_type": "code",
         "scope": "identify guilds",
+        "state": state,
     }
     return redirect(f"{DISCORD_AUTH_URL}?{urlencode(params)}")
 
@@ -411,13 +451,22 @@ def discord_login():
 def callback():
     code = request.args.get("code")
     error = request.args.get("error")
+    returned_state = request.args.get("state")
+    expected_state = session.get("oauth_state")
 
     if error:
         flash(f"Erreur OAuth Discord: {error}", "danger")
+        session.pop("oauth_state", None)
         return redirect(url_for("login"))
 
     if not code:
         flash("Erreur OAuth : code manquant", "danger")
+        session.pop("oauth_state", None)
+        return redirect(url_for("login"))
+
+    if not expected_state or returned_state != expected_state:
+        flash("Session OAuth invalide ou expirée. Relance la connexion.", "danger")
+        session.pop("oauth_state", None)
         return redirect(url_for("login"))
 
     data = {
@@ -449,6 +498,8 @@ def callback():
     except ValueError:
         flash("Reponse invalide de l'API Discord.", "danger")
         return redirect(url_for("login"))
+    finally:
+        session.pop("oauth_state", None)
 
     access_token = token_json.get("access_token")
     if not access_token:
@@ -516,7 +567,6 @@ def dashboard():
     selected_guild = request.args.get("guild_id")
 
     db = get_db()
-
     users = []
     commands = []
     total_balance = 0

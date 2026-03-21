@@ -1,35 +1,25 @@
+import json
 import os
-import secrets
 import sqlite3
+import secrets
 from datetime import timedelta
 from urllib.parse import urlencode
 
 import requests
 from flask import Flask, flash, redirect, request, session, url_for, render_template_string
-from flask_session import Session
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATABASE = os.path.join(BASE_DIR, "main_database.db")
-SESSION_DIR = os.path.join(BASE_DIR, "flask_session")
-
-os.makedirs(SESSION_DIR, exist_ok=True)
 
 app = Flask(__name__)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 
 app.config["SECRET_KEY"] = os.environ.get("SESSION_SECRET", "CHANGE_THIS_SECRET_KEY")
-app.config["SESSION_TYPE"] = "filesystem"
-app.config["SESSION_FILE_DIR"] = SESSION_DIR
-app.config["SESSION_PERMANENT"] = True
-app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=7)
-app.config["SESSION_USE_SIGNER"] = True
-app.config["SESSION_COOKIE_NAME"] = "panel_session"
 app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SECURE"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
-
-Session(app)
+app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=7)
 
 CLIENT_ID = os.environ.get("CLIENT_ID")
 CLIENT_SECRET = os.environ.get("CLIENT_SECRET")
@@ -61,7 +51,7 @@ LOGIN_HTML = """
             color: white;
         }
         .card {
-            width: min(92vw, 480px);
+            width: min(92vw, 500px);
             background: rgba(255,255,255,.06);
             border: 1px solid rgba(255,255,255,.1);
             border-radius: 20px;
@@ -115,6 +105,61 @@ LOGIN_HTML = """
             <br>
             <code>{{ redirect_uri }}</code>
         </p>
+    </div>
+</body>
+</html>
+"""
+
+ERROR_HTML = """
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Erreur OAuth</title>
+    <style>
+        body {
+            margin: 0;
+            min-height: 100vh;
+            display: grid;
+            place-items: center;
+            font-family: Arial, sans-serif;
+            background: linear-gradient(135deg, #1a0f16, #2b1221);
+            color: white;
+        }
+        .card {
+            width: min(92vw, 720px);
+            background: rgba(255,255,255,.06);
+            border: 1px solid rgba(255,255,255,.1);
+            border-radius: 20px;
+            padding: 28px;
+            box-shadow: 0 20px 60px rgba(0,0,0,.35);
+        }
+        .btn {
+            display: inline-block;
+            margin-top: 16px;
+            padding: 14px 18px;
+            border-radius: 12px;
+            background: #5865f2;
+            color: white;
+            text-decoration: none;
+            font-weight: bold;
+        }
+        pre {
+            white-space: pre-wrap;
+            word-break: break-word;
+            background: rgba(0,0,0,.25);
+            padding: 14px;
+            border-radius: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>Erreur OAuth</h1>
+        <p>{{ message }}</p>
+        <pre>{{ details }}</pre>
+        <a class="btn" href="{{ url_for('login') }}">Retour connexion</a>
     </div>
 </body>
 </html>
@@ -181,6 +226,20 @@ DASHBOARD_HTML = """
             padding: 10px 12px;
             border-radius: 12px;
             border: 0;
+        }
+        @media (max-width: 900px) {
+            .grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+        @media (max-width: 600px) {
+            .grid {
+                grid-template-columns: 1fr;
+            }
+            .topbar {
+                flex-direction: column;
+                align-items: flex-start;
+            }
         }
     </style>
 </head>
@@ -304,6 +363,11 @@ def get_saved_guilds(user_id: str) -> list[dict]:
         return []
 
 
+def render_oauth_error(message: str, details: str, status_code: int = 400):
+    app.logger.error("%s | %s", message, details)
+    return render_template_string(ERROR_HTML, message=message, details=details), status_code
+
+
 init_db()
 
 
@@ -326,6 +390,7 @@ def discord_login():
 
     state = secrets.token_urlsafe(24)
     session["oauth_state"] = state
+    session.permanent = True
     session.modified = True
 
     params = {
@@ -346,19 +411,32 @@ def callback():
     expected_state = session.get("oauth_state")
 
     if error:
-        flash(f"Erreur OAuth Discord: {error}", "danger")
-        session.pop("oauth_state", None)
-        return redirect(url_for("login"))
+        return render_oauth_error(
+            "Discord a renvoye une erreur OAuth.",
+            f"error={error}",
+            400,
+        )
 
     if not code:
-        flash("Erreur OAuth : code manquant", "danger")
-        session.pop("oauth_state", None)
-        return redirect(url_for("login"))
+        return render_oauth_error(
+            "Le callback Discord ne contient pas de code.",
+            f"query={dict(request.args)}",
+            400,
+        )
 
-    if not expected_state or returned_state != expected_state:
-        flash("Session OAuth invalide ou expiree. Relance la connexion.", "danger")
-        session.pop("oauth_state", None)
-        return redirect(url_for("login"))
+    if not expected_state:
+        return render_oauth_error(
+            "Le state OAuth n'existe plus dans la session.",
+            "La session navigateur n'a probablement pas ete conservee entre /discord-login et /callback.",
+            400,
+        )
+
+    if returned_state != expected_state:
+        return render_oauth_error(
+            "Le state OAuth est invalide.",
+            f"state_recu={returned_state} | state_attendu={expected_state}",
+            400,
+        )
 
     data = {
         "client_id": CLIENT_ID,
@@ -372,24 +450,44 @@ def callback():
 
     try:
         token_resp = requests.post(DISCORD_TOKEN_URL, data=data, headers=headers, timeout=15)
+        response_text = token_resp.text
+
+        if token_resp.status_code == 429:
+            return render_oauth_error(
+                "Discord refuse l'echange OAuth avec un 429.",
+                response_text,
+                429,
+            )
+
         token_resp.raise_for_status()
         token_json = token_resp.json()
+
     except requests.exceptions.HTTPError:
-        flash(f"Erreur OAuth Discord: {token_resp.status_code}", "danger")
-        return redirect(url_for("login"))
-    except requests.exceptions.RequestException:
-        flash("Impossible de contacter l'API Discord.", "danger")
-        return redirect(url_for("login"))
+        return render_oauth_error(
+            f"Erreur HTTP Discord {token_resp.status_code}.",
+            response_text,
+            token_resp.status_code,
+        )
+    except requests.exceptions.RequestException as exc:
+        return render_oauth_error(
+            "Impossible de contacter Discord.",
+            str(exc),
+            502,
+        )
     except ValueError:
-        flash("Reponse invalide de l'API Discord.", "danger")
-        return redirect(url_for("login"))
-    finally:
-        session.pop("oauth_state", None)
+        return render_oauth_error(
+            "Discord a renvoye un JSON invalide pour le token.",
+            token_resp.text if "token_resp" in locals() else "pas de reponse exploitable",
+            502,
+        )
 
     access_token = token_json.get("access_token")
     if not access_token:
-        flash("Erreur OAuth : token invalide", "danger")
-        return redirect(url_for("login"))
+        return render_oauth_error(
+            "Discord n'a pas renvoye access_token.",
+            json.dumps(token_json, ensure_ascii=False),
+            400,
+        )
 
     auth_headers = {"Authorization": f"Bearer {access_token}"}
 
@@ -401,12 +499,13 @@ def callback():
         guilds_resp = requests.get(DISCORD_GUILDS_URL, headers=auth_headers, timeout=15)
         guilds_resp.raise_for_status()
         guilds = guilds_resp.json()
-    except requests.exceptions.RequestException:
-        flash("Impossible de recuperer tes informations Discord.", "danger")
-        return redirect(url_for("login"))
-    except ValueError:
-        flash("Reponse invalide de l'API Discord.", "danger")
-        return redirect(url_for("login"))
+
+    except requests.exceptions.RequestException as exc:
+        return render_oauth_error(
+            "Impossible de recuperer le profil ou les serveurs Discord.",
+            str(exc),
+            502,
+        )
 
     guilds_admin = []
     for g in guilds:
@@ -421,8 +520,11 @@ def callback():
     username = user.get("username")
 
     if not user_id or not username:
-        flash("Informations utilisateur Discord invalides.", "danger")
-        return redirect(url_for("login"))
+        return render_oauth_error(
+            "Les infos utilisateur Discord sont invalides.",
+            json.dumps(user, ensure_ascii=False),
+            400,
+        )
 
     save_oauth_session(user_id, username, access_token, guilds_admin)
 

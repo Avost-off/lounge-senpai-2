@@ -8,19 +8,23 @@ from flask import Flask, render_template, redirect, request, session, flash
 # ==============================
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 app = Flask(__name__, template_folder=os.path.join(BASE_DIR, "templates"))
-app.secret_key = os.environ.get("SESSION_SECRET", "CHANGE_THIS_SECRET_KEY")
-DATABASE = os.path.join(BASE_DIR, "main_database.db")
 
-# Sécurisation cookies pour Render / HTTPS
+# SECRET_KEY pour Flask session (doit être constant)
+app.secret_key = os.environ.get("SESSION_SECRET", "CHANGE_THIS_SECRET_KEY")
+
+# Cookies sécurisés pour Render HTTPS
 app.config["SESSION_COOKIE_SECURE"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+
+DATABASE = os.path.join(BASE_DIR, "main_database.db")
 
 # ==============================
 # DISCORD OAUTH CONFIG
 # ==============================
 CLIENT_ID = os.environ.get("CLIENT_ID")
 CLIENT_SECRET = os.environ.get("CLIENT_SECRET")
-REDIRECT_URI = os.environ.get("REDIRECT_URI")
+REDIRECT_URI = os.environ.get("REDIRECT_URI")  # Exemple : https://ton-app.onrender.com/callback
 
 if not CLIENT_ID or not CLIENT_SECRET or not REDIRECT_URI:
     raise RuntimeError("⚠️ Variables OAuth manquantes !")
@@ -71,14 +75,16 @@ def init_db():
     db.commit()
     db.close()
 
-# ⚠️ Initialise la DB au démarrage
-init_db()
+init_db()  # Initialise la DB au démarrage
 
 # ==============================
 # LOGIN / OAUTH2
 # ==============================
 @app.route("/login")
 def login():
+    # Si déjà loggué, redirige vers le dashboard
+    if "user" in session:
+        return redirect("/")
     return redirect(
         f"{DISCORD_AUTH_URL}?client_id={CLIENT_ID}"
         f"&redirect_uri={REDIRECT_URI}"
@@ -103,7 +109,7 @@ def callback():
 
     try:
         token_resp = requests.post(DISCORD_TOKEN_URL, data=data, headers=headers, timeout=10)
-        token_resp.raise_for_status()  # HTTP error
+        token_resp.raise_for_status()
         token_json = token_resp.json()
     except requests.exceptions.HTTPError as e:
         if token_resp.status_code == 429:
@@ -143,7 +149,7 @@ def callback():
     guilds_admin = []
     for g in guilds:
         permissions = int(g.get("permissions", 0))
-        if permissions & 0x8:  # admin
+        if permissions & 0x8:
             guilds_admin.append({"id": g["id"], "name": g["name"]})
 
     # Stockage session

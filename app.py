@@ -9,21 +9,6 @@ from flask import Flask, render_template, redirect, request, session, flash
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 app = Flask(__name__, template_folder=os.path.join(BASE_DIR, "templates"))
 app.secret_key = os.environ.get("SESSION_SECRET", "CHANGE_THIS_SECRET_KEY")
-
-# ⚡ CONFIGURATION SESSION COOKIES
-if os.environ.get("RENDER") == "true":  # Render HTTPS
-    app.config.update(
-        SESSION_COOKIE_SECURE=True,    # ⚠️ HTTPS obligatoire
-        SESSION_COOKIE_HTTPONLY=True,
-        SESSION_COOKIE_SAMESITE="Lax"
-    )
-else:  # Local dev HTTP
-    app.config.update(
-        SESSION_COOKIE_SECURE=False,
-        SESSION_COOKIE_HTTPONLY=True,
-        SESSION_COOKIE_SAMESITE="Lax"
-    )
-
 DATABASE = os.path.join(BASE_DIR, "main_database.db")
 
 # ==============================
@@ -82,6 +67,7 @@ def init_db():
     db.commit()
     db.close()
 
+# ⚠️ IMPORTANT : on initialise la DB au chargement du module
 init_db()
 
 # ==============================
@@ -109,31 +95,44 @@ def callback():
         "code": code,
         "redirect_uri": REDIRECT_URI
     }
-
     headers = {"Content-Type": "application/x-www-form-urlencoded"}
-    token_resp = requests.post(DISCORD_TOKEN_URL, data=data, headers=headers)
+
+    try:
+        token_resp = requests.post(DISCORD_TOKEN_URL, data=data, headers=headers, timeout=10)
+        token_resp.raise_for_status()  # Vérifie que la réponse HTTP est OK
+    except requests.RequestException as e:
+        return f"Erreur OAuth Discord: impossible de contacter l'API ({e})", 500
+
+    # ⚠️ Vérification JSON
     try:
         token_json = token_resp.json()
-    except Exception as e:
-        print("Erreur JSON token_resp:", token_resp.text)
-        flash("Erreur OAuth : réponse invalide", "danger")
-        return redirect("/login")
+    except ValueError:
+        # On reçoit du HTML (ex: Cloudflare rate limit), pas du JSON
+        return ("Erreur OAuth Discord: réponse invalide (probablement rate-limited par Cloudflare). "
+                "Réessayez plus tard."), 429
 
     if "access_token" not in token_json:
-        flash("Erreur OAuth : token invalide", "danger")
-        return redirect("/login")
+        return f"Erreur OAuth Discord: token invalide ({token_json})", 400
 
     access_token = token_json["access_token"]
 
-    user = requests.get(
-        DISCORD_API_URL,
-        headers={"Authorization": f"Bearer {access_token}"}
-    ).json()
+    # Récupération user
+    try:
+        user = requests.get(
+            DISCORD_API_URL,
+            headers={"Authorization": f"Bearer {access_token}"}
+        ).json()
+    except ValueError:
+        return "Erreur OAuth Discord: impossible de récupérer l'utilisateur", 500
 
-    guilds_resp = requests.get(
-        DISCORD_GUILDS_URL,
-        headers={"Authorization": f"Bearer {access_token}"}
-    ).json()
+    # Récupération guilds
+    try:
+        guilds_resp = requests.get(
+            DISCORD_GUILDS_URL,
+            headers={"Authorization": f"Bearer {access_token}"}
+        ).json()
+    except ValueError:
+        guilds_resp = []
 
     guilds_admin = []
     for g in guilds_resp:
@@ -151,8 +150,6 @@ def callback():
     session["guilds"] = guilds_admin
     session["token"] = access_token
 
-    print("SESSION APRES CALLBACK:", session.get("user"))  # 🔹 DEBUG SESSION
-
     return redirect("/")
 
 @app.route("/logout")
@@ -167,8 +164,6 @@ def logout():
 def dashboard():
     if "user" not in session:
         return redirect("/login")
-
-    print("SESSION AU DASHBOARD:", session.get("user"))  # 🔹 DEBUG SESSION
 
     selected_guild = request.args.get("guild_id")
     db = get_db()
@@ -222,6 +217,7 @@ def toggle_command_ajax():
         return {"success": False}
 
     db = get_db()
+
     cmd = db.execute(
         "SELECT enabled FROM commands WHERE id=?",
         (command_id,)
@@ -232,17 +228,19 @@ def toggle_command_ajax():
         return {"success": False}
 
     new_state = 0 if cmd["enabled"] else 1
+
     db.execute(
         "UPDATE commands SET enabled=? WHERE id=?",
         (new_state, command_id)
     )
+
     db.commit()
     db.close()
 
     return {"success": True, "new_state": new_state}
 
 # ==============================
-# RUN LOCAL / RENDER
+# RUN LOCAL ONLY
 # ==============================
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))

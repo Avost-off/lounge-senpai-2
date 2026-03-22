@@ -229,104 +229,11 @@ DASHBOARD_HTML = """
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard</title>
-    <style>
-        body {
-            margin: 0;
-            font-family: Arial, sans-serif;
-            background: linear-gradient(135deg, #0b1120, #131d33);
-            color: white;
-            padding: 24px;
-        }
-        .wrap {
-            max-width: 1100px;
-            margin: 0 auto;
-        }
-        .panel {
-            background: rgba(255,255,255,.06);
-            border: 1px solid rgba(255,255,255,.1);
-            border-radius: 20px;
-            padding: 20px;
-            margin-bottom: 18px;
-        }
-        .grid {
-            display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            gap: 16px;
-        }
-        .card {
-            background: rgba(255,255,255,.06);
-            border: 1px solid rgba(255,255,255,.1);
-            border-radius: 16px;
-            padding: 18px;
-        }
-        .muted {
-            color: #b8c2df;
-        }
-        .topbar {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            gap: 12px;
-            margin-bottom: 18px;
-        }
-        .btn {
-            display: inline-block;
-            padding: 10px 14px;
-            border-radius: 12px;
-            background: #5865f2;
-            color: white;
-            text-decoration: none;
-            border: 0;
-            cursor: pointer;
-        }
-        select {
-            padding: 10px 12px;
-            border-radius: 12px;
-            border: 0;
-        }
-        @media (max-width: 900px) {
-            .grid { grid-template-columns: repeat(2, 1fr); }
-        }
-        @media (max-width: 600px) {
-            .grid { grid-template-columns: 1fr; }
-            .topbar {
-                flex-direction: column;
-                align-items: flex-start;
-            }
-        }
-    </style>
 </head>
 <body>
-<div class="wrap">
-    <div class="topbar">
-        <div>
-            <h1>Dashboard</h1>
-            <p class="muted">Connecte en tant que {{ user.username }}</p>
-        </div>
-        <div>
-            <a class="btn" href="{{ url_for('logout') }}">Deconnexion</a>
-        </div>
-    </div>
-
-    <div class="panel">
-        <form method="get" action="{{ url_for('dashboard') }}">
-            <label for="guild_id">Choisir un serveur :</label>
-            <select name="guild_id" id="guild_id" onchange="this.form.submit()">
-                <option value="">Selectionne un serveur</option>
-                {% for guild in guilds %}
-                    <option value="{{ guild.id }}" {% if selected_guild == guild.id %}selected{% endif %}>{{ guild.name }}</option>
-                {% endfor %}
-            </select>
-        </form>
-    </div>
-
-    <div class="grid">
-        <div class="card"><div class="muted">Serveurs admin</div><h2>{{ guilds|length }}</h2></div>
-        <div class="card"><div class="muted">Utilisateurs</div><h2>{{ users|length }}</h2></div>
-        <div class="card"><div class="muted">Commandes</div><h2>{{ commands|length }}</h2></div>
-        <div class="card"><div class="muted">Balance totale</div><h2>{{ total_balance }}</h2></div>
-    </div>
-</div>
+    <h1>Dashboard</h1>
+    <p>Connecte en tant que {{ user.username }}</p>
+    <a href="{{ url_for('logout') }}">Deconnexion</a>
 </body>
 </html>
 """
@@ -340,34 +247,6 @@ def get_db():
 
 def init_db():
     db = get_db()
-    db.execute("""
-    CREATE TABLE IF NOT EXISTS users (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        guild_id TEXT,
-        user_id TEXT,
-        username TEXT,
-        xp INTEGER DEFAULT 0,
-        level INTEGER DEFAULT 1,
-        balance INTEGER DEFAULT 0,
-        UNIQUE(guild_id, user_id)
-    )
-    """)
-    db.execute("""
-    CREATE TABLE IF NOT EXISTS commands (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        guild_id TEXT,
-        name TEXT,
-        category TEXT,
-        description TEXT,
-        enabled INTEGER DEFAULT 1
-    )
-    """)
-    db.execute("""
-    CREATE TABLE IF NOT EXISTS guild_settings (
-        guild_id TEXT PRIMARY KEY,
-        leveling_enabled INTEGER DEFAULT 1
-    )
-    """)
     db.execute("""
     CREATE TABLE IF NOT EXISTS oauth_sessions (
         user_id TEXT PRIMARY KEY,
@@ -394,31 +273,18 @@ def save_oauth_session(user_id: str, username: str, access_token: str, guilds_ad
     db.close()
 
 
-def get_saved_session(user_id: str):
-    db = get_db()
-    row = db.execute(
-        "SELECT username, access_token, guilds_json FROM oauth_sessions WHERE user_id = ?",
-        (user_id,),
-    ).fetchone()
-    db.close()
-    return row
-
-
-def get_saved_guilds(user_id: str) -> list[dict]:
-    row = get_saved_session(user_id)
-    if not row:
-        return []
-    try:
-        return json.loads(row["guilds_json"])
-    except (TypeError, json.JSONDecodeError):
-        return []
-
-
 def render_oauth_error(message: str, details: str, status_code: int = 400):
     return render_template_string(ERROR_HTML, message=message, details=details), status_code
 
 
 init_db()
+
+
+@app.route("/routes", methods=["GET"])
+def routes():
+    return {
+        "routes": sorted([str(rule) for rule in app.url_map.iter_rules()])
+    }, 200
 
 
 @app.route("/healthz", methods=["GET"])
@@ -445,13 +311,12 @@ def login():
         missing.append("OAUTH_EXCHANGE_URL")
 
     if missing:
-        return f"""
-        <h1>Variables manquantes</h1>
-        <p>{", ".join(missing)}</p>
-        <p>CLIENT_ID = {CLIENT_ID or 'MANQUANT'}</p>
-        <p>REDIRECT_URI = {REDIRECT_URI or 'MANQUANT'}</p>
-        <p>OAUTH_EXCHANGE_URL = {OAUTH_EXCHANGE_URL or 'MANQUANT'}</p>
-        """
+        return {
+            "missing": missing,
+            "CLIENT_ID": CLIENT_ID or "MANQUANT",
+            "REDIRECT_URI": REDIRECT_URI or "MANQUANT",
+            "OAUTH_EXCHANGE_URL": OAUTH_EXCHANGE_URL or "MANQUANT",
+        }, 500
 
     return render_template_string(LOGIN_HTML, redirect_uri=REDIRECT_URI, error=None)
 
@@ -460,13 +325,6 @@ def login():
 def discord_login():
     if session.get("user_id"):
         return redirect(url_for("dashboard"))
-
-    if not CLIENT_ID or not REDIRECT_URI:
-        return render_oauth_error(
-            "OAuth mal configure sur Render.",
-            "CLIENT_ID ou REDIRECT_URI manquante.",
-            500,
-        )
 
     state = secrets.token_urlsafe(24)
     session["oauth_state"] = state
@@ -508,13 +366,6 @@ def callback():
             "Le state OAuth est invalide.",
             f"state_recu={returned_state} | state_attendu={expected_state}",
             400,
-        )
-
-    if not OAUTH_EXCHANGE_URL:
-        return render_oauth_error(
-            "OAUTH_EXCHANGE_URL manquante.",
-            "Ajoute l'URL du microservice OAuth dans les variables Render.",
-            500,
         )
 
     try:
@@ -596,12 +447,6 @@ def callback():
     return redirect(url_for("dashboard"))
 
 
-@app.route("/logout", methods=["GET"])
-def logout():
-    session.clear()
-    return redirect(url_for("login"))
-
-
 @app.route("/dashboard", methods=["GET"])
 def dashboard():
     user_id = session.get("user_id")
@@ -610,62 +455,16 @@ def dashboard():
     if not user_id or not username:
         return redirect(url_for("login"))
 
-    saved = get_saved_session(user_id)
-    if not saved:
-        session.clear()
-        return redirect(url_for("login"))
-
-    guilds = get_saved_guilds(user_id)
-    selected_guild = request.args.get("guild_id")
-
-    db = get_db()
-    users = []
-    commands = []
-    total_balance = 0
-
-    if selected_guild:
-        users = db.execute("SELECT * FROM users WHERE guild_id = ?", (selected_guild,)).fetchall()
-        commands = db.execute("SELECT * FROM commands WHERE guild_id = ?", (selected_guild,)).fetchall()
-        result = db.execute("SELECT SUM(balance) AS total FROM users WHERE guild_id = ?", (selected_guild,)).fetchone()
-        total_balance = result["total"] if result and result["total"] else 0
-
-    db.close()
-
     return render_template_string(
         DASHBOARD_HTML,
         user={"id": user_id, "username": username},
-        guilds=guilds,
-        selected_guild=selected_guild,
-        users=users,
-        commands=commands,
-        total_balance=total_balance,
     )
 
 
-@app.route("/toggle_command_ajax", methods=["POST"])
-def toggle_command_ajax():
-    if "user_id" not in session:
-        return {"success": False}, 401
-
-    data = request.get_json(silent=True) or {}
-    command_id = data.get("command_id")
-
-    if not command_id:
-        return {"success": False}, 400
-
-    db = get_db()
-    cmd = db.execute("SELECT enabled FROM commands WHERE id = ?", (command_id,)).fetchone()
-
-    if not cmd:
-        db.close()
-        return {"success": False}, 404
-
-    new_state = 0 if cmd["enabled"] else 1
-    db.execute("UPDATE commands SET enabled = ? WHERE id = ?", (new_state, command_id))
-    db.commit()
-    db.close()
-
-    return {"success": True, "new_state": new_state}
+@app.route("/logout", methods=["GET"])
+def logout():
+    session.clear()
+    return redirect(url_for("login"))
 
 
 if __name__ == "__main__":

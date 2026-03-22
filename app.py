@@ -1,7 +1,7 @@
 import json
 import os
-import sqlite3
 import secrets
+import sqlite3
 from datetime import timedelta
 from urllib.parse import urlencode
 
@@ -28,7 +28,6 @@ OAUTH_EXCHANGE_URL = os.environ.get("OAUTH_EXCHANGE_URL")
 DISCORD_AUTH_URL = "https://discord.com/api/oauth2/authorize"
 DISCORD_API_URL = "https://discord.com/api/users/@me"
 DISCORD_GUILDS_URL = "https://discord.com/api/users/@me/guilds"
-
 
 LOGIN_HTML = """
 <!DOCTYPE html>
@@ -368,17 +367,32 @@ def healthz():
     return {"ok": True}, 200
 
 
-@app.route("/login")
+@app.route("/", methods=["GET", "HEAD"])
+def home():
+    return redirect(url_for("healthz"))
+
+
+@app.route("/panel-login", methods=["GET", "HEAD"])
 def login():
     if session.get("user_id"):
         return redirect(url_for("dashboard"))
 
-    if not CLIENT_ID or not REDIRECT_URI or not OAUTH_EXCHANGE_URL:
-        return render_template_string(
-            LOGIN_HTML,
-            redirect_uri=REDIRECT_URI or "REDIRECT_URI manquante",
-            error="Variables manquantes sur Render: CLIENT_ID, REDIRECT_URI ou OAUTH_EXCHANGE_URL",
-        )
+    missing = []
+    if not CLIENT_ID:
+        missing.append("CLIENT_ID")
+    if not REDIRECT_URI:
+        missing.append("REDIRECT_URI")
+    if not OAUTH_EXCHANGE_URL:
+        missing.append("OAUTH_EXCHANGE_URL")
+
+    if missing:
+        return f"""
+        <h1>Variables manquantes</h1>
+        <p>{", ".join(missing)}</p>
+        <p>CLIENT_ID = {CLIENT_ID or 'MANQUANT'}</p>
+        <p>REDIRECT_URI = {REDIRECT_URI or 'MANQUANT'}</p>
+        <p>OAUTH_EXCHANGE_URL = {OAUTH_EXCHANGE_URL or 'MANQUANT'}</p>
+        """
 
     return render_template_string(LOGIN_HTML, redirect_uri=REDIRECT_URI, error=None)
 
@@ -544,7 +558,7 @@ def logout():
     return redirect(url_for("login"))
 
 
-@app.route("/", methods=["GET"])
+@app.route("/dashboard", methods=["GET"])
 def dashboard():
     user_id = session.get("user_id")
     username = session.get("username")

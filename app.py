@@ -33,71 +33,155 @@ LOGIN_HTML = """
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Connexion Discord</title>
-    <style>
-        body {
-            margin: 0;
-            min-height: 100vh;
-            display: grid;
-            place-items: center;
-            font-family: Arial, sans-serif;
-            background: linear-gradient(135deg, #0a1020, #121f38);
-            color: white;
-        }
-        .card {
-            width: min(92vw, 500px);
-            background: rgba(255,255,255,.06);
-            border: 1px solid rgba(255,255,255,.1);
-            border-radius: 20px;
-            padding: 28px;
-            box-shadow: 0 20px 60px rgba(0,0,0,.35);
-        }
-        .btn {
-            display: inline-block;
-            margin-top: 16px;
-            padding: 14px 18px;
-            border-radius: 12px;
-            background: #5865f2;
-            color: white;
-            text-decoration: none;
-            font-weight: bold;
-        }
-        .msg {
-            margin: 10px 0;
-            padding: 10px 12px;
-            border-radius: 12px;
-            background: rgba(255,255,255,.08);
-        }
-        .muted {
-            color: #b8c2df;
-        }
-        code {
-            background: rgba(255,255,255,.08);
-            padding: 2px 7px;
-            border-radius: 999px;
-        }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Connexion Discord</title>
+  <style>
+    :root {
+      --bg: #0b1020;
+      --panel: rgba(255, 255, 255, 0.07);
+      --line: rgba(255, 255, 255, 0.12);
+      --text: #f3f6ff;
+      --muted: #aeb8d8;
+      --accent: #5865f2;
+      --danger: #ffb4a0;
+      --shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      font-family: Arial, sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at top left, rgba(88, 101, 242, 0.18), transparent 26%),
+        linear-gradient(135deg, #0a1020 0%, #121a2f 45%, #11182c 100%);
+      padding: 20px;
+    }
+
+    .card {
+      width: min(100%, 520px);
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      padding: 28px;
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(12px);
+    }
+
+    .eyebrow {
+      margin: 0 0 10px;
+      font-size: 0.75rem;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    h1 {
+      margin: 0 0 10px;
+      font-size: 2rem;
+      line-height: 1.05;
+    }
+
+    .muted {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+
+    .alert {
+      margin-top: 18px;
+      padding: 12px 14px;
+      border-radius: 14px;
+      background: rgba(255, 180, 160, 0.12);
+      border: 1px solid rgba(255, 180, 160, 0.2);
+      color: var(--danger);
+      line-height: 1.5;
+      word-break: break-word;
+    }
+
+    .actions {
+      display: flex;
+      gap: 12px;
+      margin-top: 22px;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 48px;
+      padding: 12px 18px;
+      border-radius: 14px;
+      background: var(--accent);
+      color: white;
+      text-decoration: none;
+      font-weight: 700;
+      border: 0;
+      cursor: pointer;
+    }
+
+    .btn.secondary {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--line);
+      color: var(--text);
+    }
+
+    .info {
+      margin-top: 22px;
+      padding: 14px;
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--line);
+    }
+
+    .info strong {
+      display: block;
+      margin-bottom: 8px;
+    }
+
+    code {
+      display: inline-block;
+      margin-top: 6px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--text);
+      word-break: break-all;
+    }
+  </style>
 </head>
 <body>
-    <div class="card">
-        <p style="text-transform:uppercase;letter-spacing:.16em;font-size:.75rem;color:#aab6d7;">Discord OAuth</p>
-        <h1>Connexion au panel</h1>
-        <p class="muted">Connecte-toi avec Discord pour acceder au dashboard.</p>
+  <main class="card">
+    <p class="eyebrow">Discord OAuth</p>
+    <h1>Connexion au panel</h1>
+    <p class="muted">
+      Connecte-toi avec Discord pour acceder au dashboard.
+    </p>
 
-        {% if error %}
-            <div class="msg">{{ error }}</div>
-        {% endif %}
+    {% if error %}
+      <div class="alert">
+        {{ error }}
+      </div>
+    {% endif %}
 
-        <a class="btn" href="{{ url_for('discord_login') }}">Se connecter avec Discord</a>
-
-        <p class="muted" style="margin-top:16px;">
-            Redirect URI attendue :
-            <br>
-            <code>{{ redirect_uri }}</code>
-        </p>
+    <div class="actions">
+      <a class="btn" href="{{ url_for('discord_login') }}">Se connecter avec Discord</a>
+      <a class="btn secondary" href="{{ url_for('healthz') }}">Verifier le service</a>
     </div>
+
+    <div class="info">
+      <strong>Redirect URI attendue</strong>
+      <code>{{ redirect_uri }}</code>
+    </div>
+  </main>
 </body>
 </html>
 """
@@ -118,6 +202,7 @@ ERROR_HTML = """
             font-family: Arial, sans-serif;
             background: linear-gradient(135deg, #1a0f16, #2b1221);
             color: white;
+            padding: 20px;
         }
         .card {
             width: min(92vw, 720px);

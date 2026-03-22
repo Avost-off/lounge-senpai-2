@@ -369,10 +369,10 @@ def healthz():
 
 @app.route("/", methods=["GET", "HEAD"])
 def home():
-    return redirect(url_for("healthz"))
+    return redirect(url_for("login"))
 
 
-@app.route("/panel-login", methods=["GET", "HEAD"])
+@app.route("/login", methods=["GET", "HEAD"])
 def login():
     if session.get("user_id"):
         return redirect(url_for("dashboard"))

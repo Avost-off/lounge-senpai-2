@@ -38,7 +38,6 @@ LOGIN_HTML = """
   <title>Connexion Discord</title>
   <style>
     :root {
-      --bg: #0b1020;
       --panel: rgba(255, 255, 255, 0.07);
       --line: rgba(255, 255, 255, 0.12);
       --text: #f3f6ff;
@@ -47,11 +46,7 @@ LOGIN_HTML = """
       --danger: #ffb4a0;
       --shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
     }
-
-    * {
-      box-sizing: border-box;
-    }
-
+    * { box-sizing: border-box; }
     body {
       margin: 0;
       min-height: 100vh;
@@ -64,7 +59,6 @@ LOGIN_HTML = """
         linear-gradient(135deg, #0a1020 0%, #121a2f 45%, #11182c 100%);
       padding: 20px;
     }
-
     .card {
       width: min(100%, 520px);
       background: var(--panel);
@@ -74,7 +68,6 @@ LOGIN_HTML = """
       box-shadow: var(--shadow);
       backdrop-filter: blur(12px);
     }
-
     .eyebrow {
       margin: 0 0 10px;
       font-size: 0.75rem;
@@ -82,19 +75,16 @@ LOGIN_HTML = """
       text-transform: uppercase;
       color: var(--muted);
     }
-
     h1 {
       margin: 0 0 10px;
       font-size: 2rem;
       line-height: 1.05;
     }
-
     .muted {
       margin: 0;
       color: var(--muted);
       line-height: 1.6;
     }
-
     .alert {
       margin-top: 18px;
       padding: 12px 14px;
@@ -105,14 +95,12 @@ LOGIN_HTML = """
       line-height: 1.5;
       word-break: break-word;
     }
-
     .actions {
       display: flex;
       gap: 12px;
       margin-top: 22px;
       flex-wrap: wrap;
     }
-
     .btn {
       display: inline-flex;
       align-items: center;
@@ -127,13 +115,11 @@ LOGIN_HTML = """
       border: 0;
       cursor: pointer;
     }
-
     .btn.secondary {
       background: rgba(255, 255, 255, 0.05);
       border: 1px solid var(--line);
       color: var(--text);
     }
-
     .info {
       margin-top: 22px;
       padding: 14px;
@@ -141,12 +127,10 @@ LOGIN_HTML = """
       background: rgba(255, 255, 255, 0.04);
       border: 1px solid var(--line);
     }
-
     .info strong {
       display: block;
       margin-bottom: 8px;
     }
-
     code {
       display: inline-block;
       margin-top: 6px;
@@ -162,14 +146,10 @@ LOGIN_HTML = """
   <main class="card">
     <p class="eyebrow">Discord OAuth</p>
     <h1>Connexion au panel</h1>
-    <p class="muted">
-      Connecte-toi avec Discord pour acceder au dashboard.
-    </p>
+    <p class="muted">Connecte-toi avec Discord pour acceder au dashboard.</p>
 
     {% if error %}
-      <div class="alert">
-        {{ error }}
-      </div>
+      <div class="alert">{{ error }}</div>
     {% endif %}
 
     <div class="actions">
@@ -305,14 +285,10 @@ DASHBOARD_HTML = """
             border: 0;
         }
         @media (max-width: 900px) {
-            .grid {
-                grid-template-columns: repeat(2, 1fr);
-            }
+            .grid { grid-template-columns: repeat(2, 1fr); }
         }
         @media (max-width: 600px) {
-            .grid {
-                grid-template-columns: 1fr;
-            }
+            .grid { grid-template-columns: 1fr; }
             .topbar {
                 flex-direction: column;
                 align-items: flex-start;
@@ -338,9 +314,7 @@ DASHBOARD_HTML = """
             <select name="guild_id" id="guild_id" onchange="this.form.submit()">
                 <option value="">Selectionne un serveur</option>
                 {% for guild in guilds %}
-                    <option value="{{ guild.id }}" {% if selected_guild == guild.id %}selected{% endif %}>
-                        {{ guild.name }}
-                    </option>
+                    <option value="{{ guild.id }}" {% if selected_guild == guild.id %}selected{% endif %}>{{ guild.name }}</option>
                 {% endfor %}
             </select>
         </form>
@@ -447,7 +421,7 @@ def render_oauth_error(message: str, details: str, status_code: int = 400):
 init_db()
 
 
-@app.route("/healthz")
+@app.route("/healthz", methods=["GET"])
 def healthz():
     return {"ok": True}, 200
 
@@ -482,7 +456,7 @@ def login():
     return render_template_string(LOGIN_HTML, redirect_uri=REDIRECT_URI, error=None)
 
 
-@app.route("/discord-login")
+@app.route("/discord-login", methods=["GET"])
 def discord_login():
     if session.get("user_id"):
         return redirect(url_for("dashboard"))
@@ -509,7 +483,7 @@ def discord_login():
     return redirect(f"{DISCORD_AUTH_URL}?{urlencode(params)}")
 
 
-@app.route("/callback")
+@app.route("/callback", methods=["GET"])
 def callback():
     code = request.args.get("code")
     error = request.args.get("error")
@@ -546,24 +520,12 @@ def callback():
     try:
         exchange_resp = requests.post(
             OAUTH_EXCHANGE_URL,
-            json={
-                "code": code,
-                "redirect_uri": REDIRECT_URI,
-            },
+            json={"code": code, "redirect_uri": REDIRECT_URI},
             timeout=20,
         )
         response_text = exchange_resp.text
-
-        if exchange_resp.status_code == 429:
-            return render_oauth_error(
-                "Le service OAuth a recu un 429 de Discord.",
-                response_text,
-                429,
-            )
-
         exchange_resp.raise_for_status()
         token_json = exchange_resp.json()
-
     except requests.exceptions.HTTPError:
         return render_oauth_error(
             f"Erreur HTTP du service OAuth: {exchange_resp.status_code}",
@@ -612,10 +574,7 @@ def callback():
     for g in guilds:
         permissions = int(g.get("permissions", 0))
         if permissions & 0x8:
-            guilds_admin.append({
-                "id": g["id"],
-                "name": g["name"],
-            })
+            guilds_admin.append({"id": g["id"], "name": g["name"]})
 
     user_id = user.get("id")
     username = user.get("username")
@@ -637,7 +596,7 @@ def callback():
     return redirect(url_for("dashboard"))
 
 
-@app.route("/logout")
+@app.route("/logout", methods=["GET"])
 def logout():
     session.clear()
     return redirect(url_for("login"))

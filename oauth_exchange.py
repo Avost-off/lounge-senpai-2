@@ -8,7 +8,19 @@ CLIENT_ID = os.environ.get("CLIENT_ID")
 CLIENT_SECRET = os.environ.get("CLIENT_SECRET")
 
 
-@app.route("/healthz")
+@app.route("/", methods=["GET"])
+def home():
+    return jsonify({
+        "ok": True,
+        "message": "Service OAuth actif",
+        "routes": {
+            "healthz": "/healthz",
+            "oauth_exchange": "/oauth-exchange"
+        }
+    }), 200
+
+
+@app.route("/healthz", methods=["GET"])
 def healthz():
     return {"ok": True}, 200
 
@@ -16,7 +28,7 @@ def healthz():
 @app.route("/oauth-exchange", methods=["POST"])
 def oauth_exchange():
     if not CLIENT_ID or not CLIENT_SECRET:
-        return jsonify({"error": "OAuth non configure sur le service OAuth"}), 500
+        return jsonify({"error": "CLIENT_ID ou CLIENT_SECRET manquant"}), 500
 
     body = request.get_json(silent=True) or {}
     code = body.get("code")
@@ -42,7 +54,13 @@ def oauth_exchange():
             headers=headers,
             timeout=20,
         )
-        return (resp.text, resp.status_code, {"Content-Type": "application/json"})
+
+        return (
+            resp.text,
+            resp.status_code,
+            {"Content-Type": "application/json"}
+        )
+
     except requests.RequestException as exc:
         return jsonify({"error": str(exc)}), 502
 
